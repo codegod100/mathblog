@@ -1,4 +1,4 @@
-import type { Agent } from '@atproto/api'
+import { Agent } from '@atproto/api'
 
 import { DOCUMENT_COLLECTION, PUBLICATION_COLLECTION } from './constants'
 import type { DocumentSummary, DraftRecordRef, PublicationRecord, SiteStandardDocumentRecord } from './types'
@@ -84,4 +84,20 @@ export async function saveDocument(
     cid: response.data.cid,
     rkey,
   }
+}
+
+export async function getPublicDocument(did: string, rkey: string): Promise<SiteStandardDocumentRecord> {
+  const agent = new Agent({ service: 'https://public.api.bsky.app' })
+  const response = await agent.com.atproto.repo.getRecord({
+    repo: did,
+    collection: DOCUMENT_COLLECTION,
+    rkey,
+  })
+
+  const val = response.data.value as Record<string, unknown>
+  if (val?.$type !== 'site.standard.document') {
+    throw new Error(`Record is not a site.standard.document (got ${val?.$type})`)
+  }
+
+  return val as unknown as SiteStandardDocumentRecord
 }

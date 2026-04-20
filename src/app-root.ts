@@ -1,7 +1,5 @@
 import { Agent } from '@atproto/api'
-import katex from 'katex'
 import katexCss from 'katex/dist/katex.min.css?inline'
-import { marked } from 'marked'
 import { LitElement, css, html, unsafeCSS } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { unsafeHTML } from 'lit/directives/unsafe-html.js'
@@ -13,6 +11,7 @@ import type { DocumentSummary, EditorDraft, PublicationRecord, SessionSummary, S
 import { parseMarkdownToMdDocument, emitMarkdownFromMdDocument } from './panproto/markdown-instance'
 import { mdDocumentToArticle, articleToMdDocument } from './panproto/lens-a'
 import { articleToLexicon, lexiconToArticle } from './panproto/lens-b'
+import { renderMath } from './render-markdown'
 
 function statusText(status: EditorDraft['status']) {
   switch (status) {
@@ -23,63 +22,6 @@ function statusText(status: EditorDraft['status']) {
     default:
       return 'Local draft'
   }
-}
-
-type MathToken = {
-  key: string
-  html: string
-}
-
-function renderMath(markdown: string): string {
-  const tokens: MathToken[] = []
-  let index = 0
-
-  const stash = (htmlValue: string) => {
-    const key = `@@KATEX_${index++}@@`
-    tokens.push({ key, html: htmlValue })
-    return key
-  }
-
-  const protectedMarkdown = markdown
-    .replace(/```[\s\S]*?```/g, (match) => stash(match))
-    .replace(/`[^`]+`/g, (match) => stash(match))
-
-  const withDisplayMath = protectedMarkdown.replace(/\$\$([\s\S]+?)\$\$/g, (_, expression: string) => {
-    try {
-      return stash(
-        katex.renderToString(expression.trim(), {
-          displayMode: true,
-          throwOnError: false,
-        }),
-      )
-    } catch {
-      return `$$${expression}$$`
-    }
-  })
-
-  const withInlineMath = withDisplayMath.replace(/(?<!\$)\$([^$\n]+?)\$(?!\$)/g, (_, expression: string) => {
-    try {
-      return stash(
-        katex.renderToString(expression.trim(), {
-          displayMode: false,
-          throwOnError: false,
-        }),
-      )
-    } catch {
-      return `$${expression}$`
-    }
-  })
-
-  let htmlOutput = marked.parse(withInlineMath, {
-    breaks: true,
-    gfm: true,
-  }) as string
-
-  for (const token of tokens) {
-    htmlOutput = htmlOutput.replaceAll(token.key, token.html)
-  }
-
-  return htmlOutput
 }
 
 @customElement('app-root')
@@ -93,6 +35,7 @@ export class AppRoot extends LitElement {
   @state() private isBusy = true
   @state() private isSaving = false
   @state() private statusMessage = 'Loading…'
+  @state() private articleUrl = ''
   @state() private warnings: string[] = []
   @state() private selectedDocumentUri = ''
 
@@ -331,7 +274,12 @@ export class AppRoot extends LitElement {
         updatedAt: new Date().toISOString(),
       }
       saveDraft(this.draft)
-      this.statusMessage = `${mode === 'publish' ? 'Published' : 'Saved repo draft'}: ${remote.uri}`
+      if (mode === 'publish' && this.sessionSummary) {
+        this.articleUrl = `/article/${this.sessionSummary.did}/${remote.rkey}`
+        this.statusMessage = 'Published'
+      } else {
+        this.statusMessage = `Saved repo draft: ${remote.uri}`
+      }
     } catch (error) {
       this.statusMessage = this.describeError(error, `Failed to ${mode}`)
     } finally {
@@ -555,7 +503,7 @@ export class AppRoot extends LitElement {
 
             <div class="meta-box">
               <h3>Status</h3>
-              <p class="status-message">${this.statusMessage}</p>
+              <p class="status-message">${this.statusMessage}${this.articleUrl ? html` — <a href="${this.articleUrl}" target="_blank" class="article-link">View article</a>` : ''}</p>
               <p class="muted">Last updated: ${new Date(this.draft.updatedAt).toLocaleString()}</p>
             </div>
 
@@ -744,6 +692,10 @@ export class AppRoot extends LitElement {
     .status-message {
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+
+    .article-link {
+      color: #8bd0ff;
     }
 
     .wrap {

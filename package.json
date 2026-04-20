@@ -4,20 +4,22 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "dev": "tsx watch server.ts",
+    "build": "vite build",
+    "start": "NODE_ENV=production tsx server.ts"
   },
   "dependencies": {
     "@atproto/api": "^0.19.9",
     "@atproto/oauth-client-browser": "^0.3.41",
+    "@hono/node-server": "^1.19.14",
     "@panproto/core": "^0.34.1",
+    "hono": "^4.12.14",
     "katex": "^0.16.45",
     "lit": "^3.3.2",
-    "marked": "^18.0.2",
-    "stackedit-js": "^1.0.7"
+    "marked": "^18.0.2"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.9"
   }
