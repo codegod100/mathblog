@@ -894,6 +894,36 @@ export class AppRoot extends LitElement {
       margin: 1.5rem 0;
     }
 
+    .live-preview-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 1em;
+      display: block;
+      overflow-x: auto;
+    }
+
+    .live-preview-content th,
+    .live-preview-content td {
+      padding: 0.7rem 0.85rem;
+      border: 1px solid rgba(136, 143, 193, 0.22);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .live-preview-content th {
+      color: #eef2ff;
+      background: rgba(125, 92, 255, 0.16);
+      font-weight: 600;
+    }
+
+    .live-preview-content td {
+      color: #d9deef;
+    }
+
+    .live-preview-content tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.025);
+    }
+
     button {
       cursor: pointer;
       padding: 12px 16px;
