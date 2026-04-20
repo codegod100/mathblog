@@ -4,7 +4,6 @@ import type {
   FacetFeature,
   HeaderBlock,
   HorizontalRuleBlock,
-  LathaTableBlock,
   LeafletFacet,
   LeafletBlock,
   LinearDocumentBlock,
@@ -13,14 +12,107 @@ import type {
   OrderedListBlock,
   OrderedListItem,
   SiteStandardDocumentRecord,
-  TableCell,
-  TableRow,
   TextBlock,
   UnorderedListBlock,
   UnorderedListItem,
 } from '../types'
 
 import type { Article, ArticleBlock, ArticleListItem, ArticleSegment, ArticleTableAlignment } from './lens-a'
+
+function escapeTexCell(value: string): string {
+  return value
+    .replace(/\\/g, '\\textbackslash{}')
+    .replace(/([#$%&_{}])/g, '\\$1')
+    .replace(/\^/g, '\\textasciicircum{}')
+    .replace(/~/g, '\\textasciitilde{}')
+}
+
+function tableToKatexArrayTex(rows: { header?: boolean; cells: { plaintext: string }[] }[], alignments?: ArticleTableAlignment[]): string {
+  const headerRow = rows.find((row) => row.header) ?? rows[0]
+  const bodyRows = headerRow ? rows.filter((row) => row !== headerRow) : []
+  const columnCount = headerRow?.cells.length ?? Math.max(0, ...rows.map((row) => row.cells.length))
+  const spec = Array.from({ length: columnCount }, (_, index) => {
+    const alignment = alignments?.[index]
+    if (alignment === 'center') return 'c'
+    if (alignment === 'right') return 'r'
+    return 'l'
+  }).join('')
+
+  const texRows: string[] = []
+  if (headerRow) {
+    const headerCells = Array.from({ length: columnCount }, (_, index) => escapeTexCell(headerRow.cells[index]?.plaintext ?? ''))
+    texRows.push(`${headerCells.join(' & ')} \\\\`)
+    texRows.push('\\hline')
+  }
+
+  for (const row of bodyRows) {
+    const cells = Array.from({ length: columnCount }, (_, index) => escapeTexCell(row.cells[index]?.plaintext ?? ''))
+    texRows.push(`${cells.join(' & ')} \\\\`)
+  }
+
+  if (!headerRow) {
+    for (const row of rows) {
+      const cells = Array.from({ length: columnCount }, (_, index) => escapeTexCell(row.cells[index]?.plaintext ?? ''))
+      texRows.push(`${cells.join(' & ')} \\\\`)
+    }
+  }
+
+  while (texRows.length > 0 && texRows[texRows.length - 1].trim() === '\\\\') {
+    texRows.pop()
+  }
+
+  return `\\begin{array}{${spec || 'l'}}\n${texRows.join('\n')}\n\\end{array}`
+}
+
+type ParsedArrayTable = {
+  rows: { header?: boolean; cells: { plaintext: string }[] }[]
+  alignments?: ArticleTableAlignment[]
+}
+
+function unescapeTexCell(value: string): string {
+  return value
+    .replace(/\\textbackslash\{\}/g, '\\')
+    .replace(/\\textasciicircum\{\}/g, '^')
+    .replace(/\\textasciitilde\{\}/g, '~')
+    .replace(/\\([#$%&_{}])/g, '$1')
+}
+
+function parseKatexArrayTex(tex: string): ParsedArrayTable | null {
+  const match = tex.match(/^\\begin\{array\}\{([lcr]+)\}\s*([\s\S]*?)\s*\\end\{array\}$/)
+  if (!match) return null
+
+  const [, spec, body] = match
+  const rawLines = body.split(/\n+/).map((line) => line.trim()).filter(Boolean)
+  if (rawLines.length === 0) return null
+
+  const rows: ParsedArrayTable['rows'] = []
+  let nextIsHeader = false
+
+  for (const line of rawLines) {
+    if (line === '\\hline') {
+      if (rows.length > 0) rows[0].header = true
+      continue
+    }
+
+    const normalized = line.endsWith('\\\\') ? line.slice(0, -2).trim() : line
+    const cells = normalized.split(/\s*&\s*/).map((cell) => ({ plaintext: unescapeTexCell(cell.trim()) }))
+    rows.push({ ...(nextIsHeader ? { header: true } : {}), cells })
+    nextIsHeader = false
+  }
+
+  if (rows.length === 0) return null
+
+  const alignments: ArticleTableAlignment[] = [...spec].map((char) => {
+    if (char === 'c') return 'center'
+    if (char === 'r') return 'right'
+    return 'left'
+  })
+
+  return {
+    rows,
+    ...(alignments.length > 0 ? { alignments } : {}),
+  }
+}
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).length
@@ -126,21 +218,11 @@ function convertBlock(block: ArticleBlock): LeafletBlock {
     }
     case 'math':
       return { $type: 'pub.leaflet.blocks.math', tex: block.tex } satisfies MathBlock
-    case 'table': {
-      const rows: TableRow[] = block.rows.map((r) => ({
-        ...(r.header ? { header: true } : {}),
-        cells: r.cells.map((c): TableCell => ({ plaintext: c.plaintext })),
-      }))
-      const result: LathaTableBlock = {
-        $type: 'org.latha.blocks.table',
-        rows,
-      }
-      if (block.alignments) {
-        const nonNull = block.alignments.filter((a): a is 'left' | 'center' | 'right' => a !== null)
-        if (nonNull.length > 0) result.alignments = nonNull
-      }
-      return result
-    }
+    case 'table':
+      return {
+        $type: 'pub.leaflet.blocks.math',
+        tex: tableToKatexArrayTex(block.rows, block.alignments),
+      } satisfies MathBlock
   }
 }
 
@@ -325,6 +407,17 @@ function lexiconBlockToArticle(block: LeafletBlock, warnings: string[]): Article
 
   if (t === 'pub.leaflet.blocks.math') {
     const b = block as MathBlock
+    const parsedTable = parseKatexArrayTex(b.tex)
+    if (parsedTable) {
+      return {
+        $type: 'table',
+        rows: parsedTable.rows.map((row) => ({
+          ...(row.header ? { header: true } : {}),
+          cells: row.cells.map((cell) => ({ plaintext: cell.plaintext })),
+        })),
+        ...(parsedTable.alignments ? { alignments: parsedTable.alignments } : {}),
+      }
+    }
     return { $type: 'math', tex: b.tex }
   }
 
@@ -338,22 +431,6 @@ function lexiconBlockToArticle(block: LeafletBlock, warnings: string[]): Article
     const result: ArticleBlock = { $type: 'orderedList', items: b.children.map(lexiconListItemToArticle) }
     if (typeof b.startIndex === 'number') (result as { $type: 'orderedList'; startIndex?: number; items: ArticleListItem[] }).startIndex = b.startIndex
     return result
-  }
-
-  if (t === 'org.latha.blocks.table') {
-    const b = block as LathaTableBlock
-    const alignments = b.alignments ?? []
-    const paddedAlignments = b.rows.length > 0
-      ? b.rows[0].cells.map((_, i) => (i < alignments.length ? alignments[i] : null) as ArticleTableAlignment)
-      : []
-    return {
-      $type: 'table',
-      rows: b.rows.map((r) => ({
-        ...(r.header ? { header: true } : {}),
-        cells: r.cells.map((c) => ({ plaintext: c.plaintext })),
-      })),
-      ...(paddedAlignments.length > 0 ? { alignments: paddedAlignments } : {}),
-    }
   }
 
   warnings.push(`Unsupported block type skipped: ${t}`)
