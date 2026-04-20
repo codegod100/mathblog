@@ -76,12 +76,14 @@ export type HorizontalRuleBlock = {
 }
 
 export type UnorderedListItem = {
+  $type: 'pub.leaflet.blocks.unorderedList#listItem'
   content: TextBlock | HeaderBlock
   checked?: boolean
   children?: UnorderedListItem[]
 }
 
 export type OrderedListItem = {
+  $type: 'pub.leaflet.blocks.orderedList#listItem'
   content: TextBlock | HeaderBlock
   checked?: boolean
   children?: OrderedListItem[]
@@ -98,6 +100,11 @@ export type OrderedListBlock = {
   children: OrderedListItem[]
 }
 
+export type MathBlock = {
+  $type: 'pub.leaflet.blocks.math'
+  tex: string
+}
+
 export type LeafletBlock =
   | TextBlock
   | HeaderBlock
@@ -106,13 +113,16 @@ export type LeafletBlock =
   | HorizontalRuleBlock
   | UnorderedListBlock
   | OrderedListBlock
+  | MathBlock
 
 export type LinearDocumentBlock = {
+  $type: 'pub.leaflet.pages.linearDocument#block'
   block: LeafletBlock
 }
 
 export type LinearDocumentPage = {
   $type: 'pub.leaflet.pages.linearDocument'
+  id?: string
   blocks: LinearDocumentBlock[]
 }
 

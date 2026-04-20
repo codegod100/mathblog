@@ -9,6 +9,7 @@ import type {
   HorizontalRuleBlock,
   LeafletFacet,
   LeafletDocumentRecord,
+  MathBlock,
   OrderedListBlock,
   OrderedListItem,
   TextBlock,
@@ -164,6 +165,7 @@ function listItemContent(item: Tokens.ListItem) {
 
 function makeUnorderedItem(item: Tokens.ListItem): UnorderedListItem {
   return {
+    $type: 'pub.leaflet.blocks.unorderedList#listItem',
     content: listItemContent(item),
     ...(typeof item.checked === 'boolean' ? { checked: item.checked } : {}),
   }
@@ -171,8 +173,21 @@ function makeUnorderedItem(item: Tokens.ListItem): UnorderedListItem {
 
 function makeOrderedItem(item: Tokens.ListItem): OrderedListItem {
   return {
+    $type: 'pub.leaflet.blocks.orderedList#listItem',
     content: listItemContent(item),
     ...(typeof item.checked === 'boolean' ? { checked: item.checked } : {}),
+  }
+}
+
+const DISPLAY_MATH_RE = /^\s*\$\$\s*([\s\S]+?)\s*\$\$\s*$/
+
+function extractDisplayMath(token: Tokens.Paragraph): MathBlock | null {
+  const text = token.text.trim()
+  const match = DISPLAY_MATH_RE.exec(text)
+  if (!match) return null
+  return {
+    $type: 'pub.leaflet.blocks.math',
+    tex: match[1].trim(),
   }
 }
 
@@ -187,6 +202,7 @@ export function convertMarkdownToLeaflet(draft: EditorDraft, authorDid: string):
     | HorizontalRuleBlock
     | UnorderedListBlock
     | OrderedListBlock
+    | MathBlock
   > = []
 
   for (const token of tokens) {
@@ -194,9 +210,15 @@ export function convertMarkdownToLeaflet(draft: EditorDraft, authorDid: string):
       case 'heading':
         blocks.push(makeHeaderBlock(token as Tokens.Heading))
         break
-      case 'paragraph':
-        blocks.push(makeTextBlock(token.tokens as InlineNode[] | undefined))
+      case 'paragraph': {
+        const mathBlock = extractDisplayMath(token as Tokens.Paragraph)
+        if (mathBlock) {
+          blocks.push(mathBlock)
+        } else {
+          blocks.push(makeTextBlock((token as Tokens.Paragraph).tokens as InlineNode[] | undefined))
+        }
         break
+      }
       case 'blockquote':
         blocks.push(makeBlockquoteBlock(token as Tokens.Blockquote))
         break
@@ -246,7 +268,11 @@ export function convertMarkdownToLeaflet(draft: EditorDraft, authorDid: string):
     pages: [
       {
         $type: 'pub.leaflet.pages.linearDocument',
-        blocks: blocks.map((block) => ({ block })),
+        id: crypto.randomUUID(),
+        blocks: blocks.map((block) => ({
+          $type: 'pub.leaflet.pages.linearDocument#block' as const,
+          block,
+        })),
       },
     ],
     ...(description ? { description } : {}),
