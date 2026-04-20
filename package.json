@@ -1,0 +1,23 @@
+{
+  "name": "mathblog",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.19.9",
+    "@atproto/oauth-client-browser": "^0.3.41",
+    "katex": "^0.16.45",
+    "lit": "^3.3.2",
+    "marked": "^18.0.2",
+    "stackedit-js": "^1.0.7"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.0.9"
+  }
+}
