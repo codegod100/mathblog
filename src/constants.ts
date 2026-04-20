@@ -8,7 +8,6 @@ export const DRAFT_STORAGE_KEY = 'leaflet-editor:active-draft'
 export const DEFAULT_SCOPE = 'atproto transition:generic'
 export const PUBLICATION_COLLECTION = 'site.standard.publication'
 export const DOCUMENT_COLLECTION = 'site.standard.document'
-export const LEGACY_DOCUMENT_COLLECTION = 'pub.leaflet.document'
 
 export const DEFAULT_MARKDOWN = `# Untitled leaflet\n\nStart writing here.\n\n- This editor keeps a private local draft\n- Save to repo only when you choose\n- Publish attaches the document to a site.standard.publication\n`
 

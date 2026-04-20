@@ -1,12 +1,7 @@
 import type { Agent } from '@atproto/api'
 
-import { DOCUMENT_COLLECTION, LEGACY_DOCUMENT_COLLECTION, PUBLICATION_COLLECTION } from './constants'
+import { DOCUMENT_COLLECTION, PUBLICATION_COLLECTION } from './constants'
 import type { DocumentSummary, DraftRecordRef, PublicationRecord, SiteStandardDocumentRecord } from './types'
-
-export function isLegacyRemote(remote: DraftRecordRef | undefined): boolean {
-  if (!remote) return false
-  return remote.uri.includes(`/${LEGACY_DOCUMENT_COLLECTION}/`)
-}
 
 function generateRkey(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)

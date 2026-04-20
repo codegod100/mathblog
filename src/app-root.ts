@@ -2,12 +2,11 @@ import { Agent } from '@atproto/api'
 import katex from 'katex'
 import katexCss from 'katex/dist/katex.min.css?inline'
 import { marked } from 'marked'
-import Stackedit from 'stackedit-js'
 import { LitElement, css, html, unsafeCSS } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { unsafeHTML } from 'lit/directives/unsafe-html.js'
 
-import { isLegacyRemote, listDocuments, listPublications, saveDocument } from './leaflet-api'
+import { listDocuments, listPublications, saveDocument } from './leaflet-api'
 import { createAgent, initOAuth, signIn, signOut, type OAuthSession } from './oauth'
 import { loadDraft, saveDraft } from './storage'
 import type { DocumentSummary, EditorDraft, PublicationRecord, SessionSummary, SiteStandardDocumentRecord } from './types'
@@ -98,19 +97,13 @@ export class AppRoot extends LitElement {
   @state() private selectedDocumentUri = ''
 
   private autosaveTimer?: number
-  private stackedit = new Stackedit()
   private agent?: Agent
-  private editorRef?: HTMLTextAreaElement
 
   connectedCallback(): void {
     super.connectedCallback()
-    this.stackedit.on('fileChange', (file) => {
-      this.applyDraftChange('markdown', file.content.text)
-    })
   }
 
   async firstUpdated() {
-    this.editorRef = this.renderRoot?.querySelector('textarea.editor') ?? undefined
     await this.initializeSession()
   }
 
@@ -178,15 +171,8 @@ export class AppRoot extends LitElement {
     await signIn(this.handleInput.trim())
   }
 
-  private openStackEdit() {
-    this.stackedit.openFile({
-      name: `${this.draft.title || 'leaflet'}.md`,
-      content: { text: this.draft.markdown },
-    })
-  }
-
   private getEditor(): HTMLTextAreaElement | null {
-    return this.editorRef ?? this.renderRoot?.querySelector('textarea.editor') ?? null
+    return this.renderRoot?.querySelector('textarea.editor') ?? null
   }
 
   private wrapSelection(before: string, after: string, placeholder: string) {
@@ -323,12 +309,7 @@ export class AppRoot extends LitElement {
     try {
       const record = this.buildRecord(mode)
 
-      let existing = this.draft.remote
-      if (isLegacyRemote(existing)) {
-        existing = undefined
-      }
-
-      const remote = await saveDocument(this.agent, record, existing)
+      const remote = await saveDocument(this.agent, record, this.draft.remote)
       this.draft = {
         ...this.draft,
         remote,
@@ -390,15 +371,6 @@ export class AppRoot extends LitElement {
 
     return html`
       <main>
-        <section class="hero">
-          <p class="eyebrow">AT Protocol + Leaflet + StackEdit</p>
-          <h1>Browser-only Leaflet markdown editor</h1>
-            <p class="lede">
-            Write in StackEdit, keep one private local draft, then save a repo draft or
-            publish to a <code>site.standard.publication</code> when you're ready.
-          </p>
-        </section>
-
         <section class="panel grid auth-panel">
           <div>
             <h2>Session</h2>
@@ -421,7 +393,6 @@ export class AppRoot extends LitElement {
             ${this.sessionSummary
               ? html`<button @click=${this.handleSignOut}>Sign out</button>`
               : html`<button ?disabled=${this.isBusy} @click=${this.beginSignIn}>Sign in</button>`}
-            <button class="secondary" @click=${this.openStackEdit}>Open StackEdit</button>
           </div>
         </section>
 
@@ -563,9 +534,6 @@ export class AppRoot extends LitElement {
                 ? html`
                     <p class="mono wrap">URI: ${this.draft.remote.uri}</p>
                     <p class="mono wrap">CID: ${this.draft.remote.cid}</p>
-                    ${isLegacyRemote(this.draft.remote)
-                      ? html`<p class="warning">Legacy pub.leaflet.document — next save creates a new site.standard.document</p>`
-                      : ''}
                   `
                 : html`<p class="muted">No repo record yet.</p>`}
             </div>
@@ -590,11 +558,7 @@ export class AppRoot extends LitElement {
             <h2>Generated record preview</h2>
             <span class="status-pill">${previewRecord?.content?.pages?.[0]?.blocks?.length ?? 0} blocks</span>
           </div>
-          <pre>${JSON.stringify(
-            isLegacyRemote(this.draft.remote) ? '(legacy remote — will create new site.standard.document on save)' : null,
-            null,
-            2,
-          )}${JSON.stringify(previewRecord, null, 2)}</pre>
+          <pre>${JSON.stringify(previewRecord, null, 2)}</pre>
         </section>
       </main>
     `
@@ -626,39 +590,12 @@ export class AppRoot extends LitElement {
       margin: 0;
     }
 
-    .hero,
     .panel {
       background: rgba(15, 18, 35, 0.88);
       border: 1px solid rgba(136, 143, 193, 0.22);
       border-radius: 24px;
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
-    }
-
-    .hero {
-      padding: 36px;
-      margin-bottom: 20px;
-    }
-
-    .eyebrow {
-      color: #9bb2ff;
-      font-size: 0.85rem;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      margin-bottom: 10px;
-    }
-
-    h1 {
-      font-size: clamp(2rem, 5vw, 3.8rem);
-      line-height: 0.96;
-      letter-spacing: -0.05em;
-      margin-bottom: 12px;
-      max-width: 12ch;
-    }
-
-    .lede {
-      color: #b4bbd6;
-      max-width: 60ch;
-      line-height: 1.5;
+      padding: 24px;
     }
 
     .grid {
@@ -669,10 +606,6 @@ export class AppRoot extends LitElement {
     .auth-panel {
       grid-template-columns: 1.2fr 0.8fr;
       margin-bottom: 20px;
-    }
-
-    .panel {
-      padding: 24px;
     }
 
     .panel-header {
@@ -1023,7 +956,6 @@ export class AppRoot extends LitElement {
         padding-top: 20px;
       }
 
-      .hero,
       .panel {
         border-radius: 20px;
       }
@@ -1039,10 +971,6 @@ export class AppRoot extends LitElement {
 
       .panel {
         padding: 18px;
-      }
-
-      h1 {
-        max-width: none;
       }
     }
   `
