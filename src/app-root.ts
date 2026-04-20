@@ -223,12 +223,40 @@ export class AppRoot extends LitElement {
         status: publicationUri ? 'published' : 'repo-draft',
         updatedAt: new Date().toISOString(),
       }
+      this.articleUrl = publicationUri && this.sessionSummary ? `/article/${this.sessionSummary.did}/${doc.rkey}` : ''
       this.warnings = warnings
       saveDraft(this.draft)
       this.statusMessage = `Loaded: ${doc.title}`
     } catch (error) {
       this.statusMessage = this.describeError(error, 'Failed to load document')
     }
+  }
+
+  private startNewArticle() {
+    const defaultPublicationUri = this.draft.publicationUri.trim() || this.publications[0]?.uri || ''
+    const today = new Date().toISOString().slice(0, 10)
+    this.selectedDocumentUri = ''
+    this.articleUrl = ''
+    this.warnings = []
+    this.draft = {
+      ...this.draft,
+      title: `Untitled - ${today}`,
+      description: '',
+      tags: '',
+      markdown: '',
+      publicationUri: defaultPublicationUri,
+      status: 'local-draft',
+      remote: undefined,
+      updatedAt: new Date().toISOString(),
+    }
+    saveDraft(this.draft)
+
+    const publicationName = this.publications.find((publication) => publication.uri === defaultPublicationUri)?.name
+    this.statusMessage = publicationName
+      ? `Created new article in ${publicationName}`
+      : defaultPublicationUri
+        ? 'Created new article'
+        : 'Created new article, but no publication is available'
   }
 
   private buildRecord(mode: 'draft' | 'publish'): SiteStandardDocumentRecord {
@@ -278,6 +306,7 @@ export class AppRoot extends LitElement {
         this.articleUrl = `/article/${this.sessionSummary.did}/${remote.rkey}`
         this.statusMessage = 'Published'
       } else {
+        this.articleUrl = ''
         this.statusMessage = `Saved repo draft: ${remote.uri}`
       }
     } catch (error) {
@@ -438,21 +467,24 @@ export class AppRoot extends LitElement {
           </div>
 
           <div class="save-grid-3col">
-            <label>
-              <span>Open existing article</span>
-              <select
-                .value=${this.selectedDocumentUri}
-                @change=${(event: Event) => {
-                  this.selectedDocumentUri = (event.target as HTMLSelectElement).value
-                  if (this.selectedDocumentUri) this.loadSelectedDocument()
-                }}
-              >
-                <option value="">New article</option>
-                ${this.documents.map(
-                  (doc) => html`<option value=${doc.uri}>${doc.title}</option>`,
-                )}
-              </select>
-            </label>
+            <div class="existing-article-control">
+              <label>
+                <span>Existing article</span>
+                <select
+                  .value=${this.selectedDocumentUri}
+                  @change=${(event: Event) => {
+                    this.selectedDocumentUri = (event.target as HTMLSelectElement).value
+                    if (this.selectedDocumentUri) this.loadSelectedDocument()
+                  }}
+                >
+                  <option value="">Select an article</option>
+                  ${this.documents.map(
+                    (doc) => html`<option value=${doc.uri}>${doc.title}</option>`,
+                  )}
+                </select>
+              </label>
+              <button class="secondary small" @click=${this.startNewArticle}>New article</button>
+            </div>
 
             <label>
               <span>Choose publication</span>
@@ -647,6 +679,12 @@ export class AppRoot extends LitElement {
       display: grid;
       gap: 0;
       min-width: 0;
+    }
+
+    .existing-article-control {
+      display: grid;
+      gap: 8px;
+      align-content: start;
     }
 
     .editor-label {

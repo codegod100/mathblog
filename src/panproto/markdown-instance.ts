@@ -50,6 +50,67 @@ export type MdDocument = {
 }
 
 const DISPLAY_MATH_RE = /^\s*\$\$\s*([\s\S]+?)\s*\$\$\s*$/
+const INLINE_MATH_RE = /(?<!\$)\$([^$\n]+?)\$(?!\$)/g
+
+type ProtectedInlineMath = {
+  text: string
+  restores: Map<string, string>
+}
+
+function protectInlineMath(text: string): ProtectedInlineMath {
+  const restores = new Map<string, string>()
+  let index = 0
+  const protectedText = text.replace(INLINE_MATH_RE, (match) => {
+    const key = `@@INLINE_MATH_${index++}@@`
+    restores.set(key, match)
+    return key
+  })
+  return { text: protectedText, restores }
+}
+
+function restoreInlineMathSegments(segments: Segment[], restores: Map<string, string>): Segment[] {
+  if (restores.size === 0) return segments
+
+  const restored: Segment[] = []
+  for (const segment of segments) {
+    const exact = restores.get(segment.text)
+    if (exact) {
+      restored.push({ text: exact })
+      continue
+    }
+
+    let cursor = 0
+    const matches = [...restores.entries()]
+      .map(([key, value]) => ({ key, value, index: segment.text.indexOf(key) }))
+      .filter((match) => match.index >= 0)
+      .sort((a, b) => a.index - b.index)
+
+    if (matches.length === 0) {
+      restored.push(segment)
+      continue
+    }
+
+    for (const match of matches) {
+      if (match.index > cursor) {
+        restored.push({ ...segment, text: segment.text.slice(cursor, match.index) })
+      }
+      restored.push({ text: match.value })
+      cursor = match.index + match.key.length
+    }
+
+    if (cursor < segment.text.length) {
+      restored.push({ ...segment, text: segment.text.slice(cursor) })
+    }
+  }
+
+  return restored
+}
+
+function parseInlineSegments(fallbackText: string): Segment[] {
+  const { text, restores } = protectInlineMath(fallbackText)
+  const protectedTokens = Lexer.lexInline(text) as InlineNode[]
+  return restoreInlineMathSegments(flattenInline(protectedTokens), restores)
+}
 
 function flattenInline(tokens: InlineNode[] | undefined, wrappers: Partial<Pick<Segment, 'bold' | 'italic' | 'strikethrough' | 'code'>> = {}): Segment[] {
   if (!tokens || tokens.length === 0) return []
@@ -104,10 +165,10 @@ function flattenInline(tokens: InlineNode[] | undefined, wrappers: Partial<Pick<
 function listItemContent(item: Tokens.ListItem): Segment[] {
   const first = item.tokens[0]
   if (first?.type === 'text' || first?.type === 'paragraph') {
-    return flattenInline(first.tokens as InlineNode[] | undefined)
+    return parseInlineSegments(first.text)
   }
   if (first?.type === 'heading') {
-    return flattenInline((first as Tokens.Heading).tokens as InlineNode[] | undefined)
+    return parseInlineSegments((first as Tokens.Heading).text)
   }
   return [{ text: item.text }]
 }
@@ -140,7 +201,7 @@ export function parseMarkdownToMdDocument(draft: EditorDraft): MdDocument & { wa
         blocks.push({
           $type: 'heading',
           level: (token as Tokens.Heading).depth,
-          segments: flattenInline((token as Tokens.Heading).tokens as InlineNode[] | undefined),
+          segments: parseInlineSegments((token as Tokens.Heading).text),
         })
         break
       case 'paragraph': {
@@ -150,21 +211,21 @@ export function parseMarkdownToMdDocument(draft: EditorDraft): MdDocument & { wa
         } else {
           blocks.push({
             $type: 'paragraph',
-            segments: flattenInline((token as Tokens.Paragraph).tokens as InlineNode[] | undefined),
+            segments: parseInlineSegments((token as Tokens.Paragraph).text),
           })
         }
         break
       }
       case 'blockquote':
+        {
+          const paragraphs = (token as Tokens.Blockquote).tokens.filter((item): item is Tokens.Paragraph => item.type === 'paragraph')
+          const text = paragraphs.map((item) => item.text).join('\n')
         blocks.push({
           $type: 'blockquote',
-          segments: flattenInline(
-            (token as Tokens.Blockquote).tokens
-              .filter((item): item is Tokens.Paragraph => item.type === 'paragraph')
-              .flatMap((item) => item.tokens as InlineNode[]),
-          ),
+          segments: parseInlineSegments(text),
         })
         break
+        }
       case 'code':
         blocks.push({
           $type: 'code',
