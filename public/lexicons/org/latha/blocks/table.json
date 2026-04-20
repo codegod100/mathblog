@@ -1,0 +1,42 @@
+{
+  "lexicon": 1,
+  "id": "org.latha.blocks.table",
+  "defs": {
+    "main": {
+      "type": "object",
+      "required": ["rows"],
+      "properties": {
+        "caption": { "type": "string" },
+        "alignments": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["left", "center", "right"]
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": { "type": "ref", "ref": "#row" }
+        }
+      }
+    },
+    "row": {
+      "type": "object",
+      "required": ["cells"],
+      "properties": {
+        "header": { "type": "boolean" },
+        "cells": {
+          "type": "array",
+          "items": { "type": "ref", "ref": "#cell" }
+        }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "required": ["plaintext"],
+      "properties": {
+        "plaintext": { "type": "string" }
+      }
+    }
+  }
+}

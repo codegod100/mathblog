@@ -2,7 +2,7 @@ import type { LensHandle } from '@panproto/core'
 
 import { getPanproto } from './init'
 import { buildSchemas } from './schemas'
-import type { MdBlock, MdDocument, MdListItem, Segment } from './markdown-instance'
+import type { MdBlock, MdDocument, MdListItem, MdTableRow, Segment } from './markdown-instance'
 
 export type ArticleSegment = {
   text: string
@@ -19,6 +19,17 @@ export type ArticleListItem = {
   children: ArticleListItem[]
 }
 
+export type ArticleTableCell = {
+  plaintext: string
+}
+
+export type ArticleTableAlignment = 'left' | 'center' | 'right' | null
+
+export type ArticleTableRow = {
+  header?: boolean
+  cells: ArticleTableCell[]
+}
+
 export type ArticleBlock =
   | { $type: 'header'; level: number; segments: ArticleSegment[] }
   | { $type: 'text'; segments: ArticleSegment[] }
@@ -28,6 +39,7 @@ export type ArticleBlock =
   | { $type: 'unorderedList'; items: ArticleListItem[] }
   | { $type: 'orderedList'; startIndex?: number; items: ArticleListItem[] }
   | { $type: 'math'; tex: string }
+  | { $type: 'table'; rows: ArticleTableRow[]; alignments?: ArticleTableAlignment[] }
 
 export type Article = {
   title: string
@@ -77,6 +89,15 @@ function convertBlock(block: MdBlock): ArticleBlock {
     }
     case 'math':
       return { $type: 'math', tex: block.tex }
+    case 'table':
+      return {
+        $type: 'table',
+        rows: block.rows.map((r) => ({
+          ...(r.header ? { header: true } : {}),
+          cells: r.cells.map((c) => ({ plaintext: c.plaintext })),
+        })),
+        ...(block.alignments ? { alignments: block.alignments } : {}),
+      }
   }
 }
 
@@ -130,6 +151,15 @@ function convertArticleBlock(block: ArticleBlock): MdBlock {
     }
     case 'math':
       return { $type: 'math', tex: block.tex }
+    case 'table':
+      return {
+        $type: 'table',
+        rows: block.rows.map((r): MdTableRow => ({
+          ...(r.header ? { header: true } : {}),
+          cells: r.cells.map((c) => ({ plaintext: c.plaintext })),
+        })),
+        ...(block.alignments ? { alignments: block.alignments } : {}),
+      }
   }
 }
 

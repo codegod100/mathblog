@@ -19,6 +19,17 @@ export type MdListItem = {
   children: MdListItem[]
 }
 
+export type MdTableCell = {
+  plaintext: string
+}
+
+export type MdTableAlignment = 'left' | 'center' | 'right' | null
+
+export type MdTableRow = {
+  header?: boolean
+  cells: MdTableCell[]
+}
+
 export type MdBlock =
   | { $type: 'heading'; level: number; segments: Segment[] }
   | { $type: 'paragraph'; segments: Segment[] }
@@ -28,6 +39,7 @@ export type MdBlock =
   | { $type: 'unorderedList'; items: MdListItem[] }
   | { $type: 'orderedList'; startIndex?: number; items: MdListItem[] }
   | { $type: 'math'; tex: string }
+  | { $type: 'table'; rows: MdTableRow[]; alignments?: MdTableAlignment[] }
 
 export type MdDocument = {
   title: string
@@ -179,6 +191,22 @@ export function parseMarkdownToMdDocument(draft: EditorDraft): MdDocument & { wa
         break
       case 'space':
         break
+      case 'table': {
+        const tbl = token as Tokens.Table
+        const alignments: MdTableAlignment[] = tbl.align ?? []
+        const rows: MdTableRow[] = []
+        rows.push({
+          header: true,
+          cells: tbl.header.map((c) => ({ plaintext: c.text })),
+        })
+        for (const row of tbl.rows) {
+          rows.push({
+            cells: row.map((c) => ({ plaintext: c.text })),
+          })
+        }
+        blocks.push({ $type: 'table', rows, ...(alignments.length > 0 ? { alignments } : {}) })
+        break
+      }
       default:
         warnings.push(`Unsupported markdown token skipped: ${token.type}`)
         break
@@ -231,11 +259,42 @@ function emitBlock(block: MdBlock): string {
     }
     case 'math':
       return `$$\n${block.tex}\n$$`
+    case 'table': {
+      const alignments = block.alignments ?? []
+      const headerRow = block.rows.find((r) => r.header) ?? block.rows[0]
+      const bodyRows = block.rows.filter((r) => r !== headerRow)
+      const colCount = headerRow?.cells.length ?? 0
+
+      const delimiter = alignments.length > 0
+        ? alignments.slice(0, colCount).map((a) => {
+            if (a === 'center') return ':---:'
+            if (a === 'right') return '---:'
+            if (a === 'left') return ':---'
+            return '---'
+          }).join(' | ')
+        : Array.from({ length: colCount }, () => '---').join(' | ')
+
+      const lines: string[] = []
+      if (headerRow) {
+        lines.push('| ' + headerRow.cells.map((c) => escapePipe(c.plaintext)).join(' | ') + ' |')
+      }
+      lines.push('| ' + delimiter + ' |')
+      for (const row of bodyRows) {
+        const cells = row.cells.map((c) => escapePipe(c.plaintext))
+        while (cells.length < colCount) cells.push('')
+        lines.push('| ' + cells.join(' | ') + ' |')
+      }
+      return lines.join('\n')
+    }
   }
 }
 
 function emitSegments(segments: Segment[]): string {
   return segments.map(emitSegment).join('')
+}
+
+function escapePipe(text: string): string {
+  return text.replace(/\|/g, '\\|')
 }
 
 function emitSegment(seg: Segment): string {

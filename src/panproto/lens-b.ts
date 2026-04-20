@@ -4,6 +4,7 @@ import type {
   FacetFeature,
   HeaderBlock,
   HorizontalRuleBlock,
+  LathaTableBlock,
   LeafletFacet,
   LeafletBlock,
   LinearDocumentBlock,
@@ -12,12 +13,14 @@ import type {
   OrderedListBlock,
   OrderedListItem,
   SiteStandardDocumentRecord,
+  TableCell,
+  TableRow,
   TextBlock,
   UnorderedListBlock,
   UnorderedListItem,
 } from '../types'
 
-import type { Article, ArticleBlock, ArticleListItem, ArticleSegment } from './lens-a'
+import type { Article, ArticleBlock, ArticleListItem, ArticleSegment, ArticleTableAlignment } from './lens-a'
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).length
@@ -123,6 +126,21 @@ function convertBlock(block: ArticleBlock): LeafletBlock {
     }
     case 'math':
       return { $type: 'pub.leaflet.blocks.math', tex: block.tex } satisfies MathBlock
+    case 'table': {
+      const rows: TableRow[] = block.rows.map((r) => ({
+        ...(r.header ? { header: true } : {}),
+        cells: r.cells.map((c): TableCell => ({ plaintext: c.plaintext })),
+      }))
+      const result: LathaTableBlock = {
+        $type: 'org.latha.blocks.table',
+        rows,
+      }
+      if (block.alignments) {
+        const nonNull = block.alignments.filter((a): a is 'left' | 'center' | 'right' => a !== null)
+        if (nonNull.length > 0) result.alignments = nonNull
+      }
+      return result
+    }
   }
 }
 
@@ -320,6 +338,22 @@ function lexiconBlockToArticle(block: LeafletBlock, warnings: string[]): Article
     const result: ArticleBlock = { $type: 'orderedList', items: b.children.map(lexiconListItemToArticle) }
     if (typeof b.startIndex === 'number') (result as { $type: 'orderedList'; startIndex?: number; items: ArticleListItem[] }).startIndex = b.startIndex
     return result
+  }
+
+  if (t === 'org.latha.blocks.table') {
+    const b = block as LathaTableBlock
+    const alignments = b.alignments ?? []
+    const paddedAlignments = b.rows.length > 0
+      ? b.rows[0].cells.map((_, i) => (i < alignments.length ? alignments[i] : null) as ArticleTableAlignment)
+      : []
+    return {
+      $type: 'table',
+      rows: b.rows.map((r) => ({
+        ...(r.header ? { header: true } : {}),
+        cells: r.cells.map((c) => ({ plaintext: c.plaintext })),
+      })),
+      ...(paddedAlignments.length > 0 ? { alignments: paddedAlignments } : {}),
+    }
   }
 
   warnings.push(`Unsupported block type skipped: ${t}`)

@@ -105,6 +105,24 @@ export type MathBlock = {
   tex: string
 }
 
+export type TableCell = {
+  plaintext: string
+}
+
+export type TableAlignment = 'left' | 'center' | 'right' | null
+
+export type TableRow = {
+  header?: boolean
+  cells: TableCell[]
+}
+
+export type LathaTableBlock = {
+  $type: 'org.latha.blocks.table'
+  rows: TableRow[]
+  alignments?: TableAlignment[]
+  caption?: string
+}
+
 export type LeafletBlock =
   | TextBlock
   | HeaderBlock
@@ -114,6 +132,7 @@ export type LeafletBlock =
   | UnorderedListBlock
   | OrderedListBlock
   | MathBlock
+  | LathaTableBlock
 
 export type LinearDocumentBlock = {
   $type: 'pub.leaflet.pages.linearDocument#block'
