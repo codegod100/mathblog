@@ -126,18 +126,24 @@ export type LinearDocumentPage = {
   blocks: LinearDocumentBlock[]
 }
 
-export type LeafletDocumentRecord = {
-  $type: 'pub.leaflet.document'
-  title: string
-  author: string
+export type LeafletContent = {
+  $type: 'pub.leaflet.content'
   pages: LinearDocumentPage[]
+}
+
+export type SiteStandardDocumentRecord = {
+  $type: 'site.standard.document'
+  site: string
+  title: string
+  publishedAt: string
+  path: string
+  content: LeafletContent
   description?: string
   tags?: string[]
-  publication?: string
-  publishedAt?: string
+  updatedAt?: string
 }
 
 export type ConversionResult = {
-  record: LeafletDocumentRecord
+  pages: LinearDocumentPage[]
   warnings: string[]
 }

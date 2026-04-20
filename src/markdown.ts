@@ -8,7 +8,6 @@ import type {
   HeaderBlock,
   HorizontalRuleBlock,
   LeafletFacet,
-  LeafletDocumentRecord,
   MathBlock,
   OrderedListBlock,
   OrderedListItem,
@@ -191,7 +190,7 @@ function extractDisplayMath(token: Tokens.Paragraph): MathBlock | null {
   }
 }
 
-export function convertMarkdownToLeaflet(draft: EditorDraft, authorDid: string): ConversionResult {
+export function convertMarkdownToLeaflet(draft: EditorDraft): ConversionResult {
   const warnings: string[] = []
   const tokens = Lexer.lex(draft.markdown)
   const blocks: Array<
@@ -254,17 +253,7 @@ export function convertMarkdownToLeaflet(draft: EditorDraft, authorDid: string):
     }
   }
 
-  const title = draft.title.trim() || 'Untitled leaflet'
-  const description = draft.description.trim()
-  const tags = draft.tags
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-
-  const record: LeafletDocumentRecord = {
-    $type: 'pub.leaflet.document',
-    title,
-    author: authorDid,
+  return {
     pages: [
       {
         $type: 'pub.leaflet.pages.linearDocument',
@@ -275,9 +264,6 @@ export function convertMarkdownToLeaflet(draft: EditorDraft, authorDid: string):
         })),
       },
     ],
-    ...(description ? { description } : {}),
-    ...(tags.length > 0 ? { tags } : {}),
+    warnings,
   }
-
-  return { record, warnings }
 }

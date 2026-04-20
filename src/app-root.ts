@@ -7,11 +7,11 @@ import { LitElement, css, html, unsafeCSS } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { unsafeHTML } from 'lit/directives/unsafe-html.js'
 
-import { listPublications, saveDocument } from './leaflet-api'
+import { isLegacyRemote, listPublications, saveDocument } from './leaflet-api'
 import { convertMarkdownToLeaflet } from './markdown'
 import { createAgent, initOAuth, signIn, signOut, type OAuthSession } from './oauth'
 import { loadDraft, saveDraft } from './storage'
-import type { EditorDraft, PublicationRecord, SessionSummary } from './types'
+import type { EditorDraft, PublicationRecord, SessionSummary, SiteStandardDocumentRecord } from './types'
 
 function statusText(status: EditorDraft['status']) {
   switch (status) {
@@ -187,6 +187,41 @@ export class AppRoot extends LitElement {
     }
   }
 
+  private buildRecord(mode: 'draft' | 'publish'): SiteStandardDocumentRecord {
+    const did = this.session!.sub
+    const { pages, warnings } = convertMarkdownToLeaflet(this.draft)
+    this.warnings = warnings
+
+    const title = this.draft.title.trim() || 'Untitled leaflet'
+    const description = this.draft.description.trim()
+    const tags = this.draft.tags
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+
+    const publicationUri = this.draft.publicationUri.trim()
+    const site = mode === 'publish' && publicationUri
+      ? publicationUri
+      : `https://leaflet.pub/p/${did}`
+
+    const now = new Date().toISOString()
+
+    return {
+      $type: 'site.standard.document',
+      site,
+      title,
+      publishedAt: now,
+      path: '',
+      content: {
+        $type: 'pub.leaflet.content',
+        pages,
+      },
+      ...(description ? { description } : {}),
+      ...(tags.length > 0 ? { tags } : {}),
+      updatedAt: now,
+    }
+  }
+
   private async persistRemote(mode: 'draft' | 'publish') {
     if (!this.agent || !this.session) {
       this.statusMessage = 'Sign in before saving to the repo.'
@@ -200,18 +235,14 @@ export class AppRoot extends LitElement {
 
     this.isSaving = true
     try {
-      const conversion = convertMarkdownToLeaflet(this.draft, this.session.sub)
-      const record = {
-        ...conversion.record,
-        ...(mode === 'publish'
-          ? {
-              publication: this.draft.publicationUri.trim(),
-              publishedAt: new Date().toISOString(),
-            }
-          : {}),
+      const record = this.buildRecord(mode)
+
+      let existing = this.draft.remote
+      if (isLegacyRemote(existing)) {
+        existing = undefined
       }
 
-      const remote = await saveDocument(this.agent, record, this.draft.remote)
+      const remote = await saveDocument(this.agent, record, existing)
       this.draft = {
         ...this.draft,
         remote,
@@ -219,7 +250,6 @@ export class AppRoot extends LitElement {
         updatedAt: new Date().toISOString(),
       }
       saveDraft(this.draft)
-      this.warnings = conversion.warnings
       this.statusMessage = `${mode === 'publish' ? 'Published' : 'Saved repo draft'}: ${remote.uri}`
     } catch (error) {
       this.statusMessage = this.describeError(error, `Failed to ${mode}`)
@@ -249,10 +279,7 @@ export class AppRoot extends LitElement {
   }
 
   render() {
-    const draftPreview = convertMarkdownToLeaflet(
-      this.draft,
-      this.sessionSummary?.did ?? 'did:example:local',
-    )
+    const { pages: previewPages, warnings: previewWarnings } = convertMarkdownToLeaflet(this.draft)
     const livePreviewHtml = renderMath(this.draft.markdown)
 
     return html`
@@ -262,7 +289,7 @@ export class AppRoot extends LitElement {
           <h1>Browser-only Leaflet markdown editor</h1>
             <p class="lede">
             Write in StackEdit, keep one private local draft, then save a repo draft or
-            publish to a <code>pub.leaflet.publication</code> when you're ready.
+            publish to a <code>site.standard.publication</code> when you're ready.
           </p>
         </section>
 
@@ -378,7 +405,7 @@ export class AppRoot extends LitElement {
                 @input=${(event: Event) =>
                   this.applyDraftChange('publicationUri', (event.target as HTMLInputElement).value)}
                 @blur=${this.saveImmediately}
-                placeholder="at://did:plc:.../pub.leaflet.publication/..."
+                placeholder="at://did:plc:.../site.standard.publication/..."
               />
             </label>
           </div>
@@ -400,6 +427,9 @@ export class AppRoot extends LitElement {
                 ? html`
                     <p class="mono">URI: ${this.draft.remote.uri}</p>
                     <p class="mono">CID: ${this.draft.remote.cid}</p>
+                    ${isLegacyRemote(this.draft.remote)
+                      ? html`<p class="warning">Legacy pub.leaflet.document — next save creates a new site.standard.document</p>`
+                      : ''}
                   `
                 : html`<p class="muted">No repo record yet.</p>`}
             </div>
@@ -421,10 +451,38 @@ export class AppRoot extends LitElement {
 
         <section class="panel preview">
           <div class="panel-header">
-            <h2>Generated Leaflet record preview</h2>
-            <span class="status-pill">${draftPreview.record.pages[0].blocks.length} blocks</span>
+            <h2>Generated record preview</h2>
+            <span class="status-pill">${previewPages[0].blocks.length} blocks</span>
           </div>
-          <pre>${JSON.stringify(draftPreview.record, null, 2)}</pre>
+          <pre>${JSON.stringify(
+            isLegacyRemote(this.draft.remote) ? '(legacy remote — will create new site.standard.document on save)' : null,
+            null,
+            2,
+          )}${JSON.stringify(
+            (() => {
+              const did = this.sessionSummary?.did ?? 'did:example:local'
+              const title = this.draft.title.trim() || 'Untitled leaflet'
+              const description = this.draft.description.trim()
+              const tags = this.draft.tags.split(',').map((t) => t.trim()).filter(Boolean)
+              const publicationUri = this.draft.publicationUri.trim()
+              const site = publicationUri || `https://leaflet.pub/p/${did}`
+              const now = new Date().toISOString()
+              return {
+                $type: 'site.standard.document',
+                site,
+                title,
+                publishedAt: now,
+                path: '/<rkey>',
+                content: { $type: 'pub.leaflet.content', pages: previewPages },
+                ...(description ? { description } : {}),
+                ...(tags.length > 0 ? { tags } : {}),
+                updatedAt: now,
+                warnings: previewWarnings,
+              }
+            })(),
+            null,
+            2,
+          )}</pre>
         </section>
       </main>
     `
@@ -532,6 +590,11 @@ export class AppRoot extends LitElement {
       font-family: 'JetBrains Mono', ui-monospace, monospace;
       color: #b8f0d4;
       word-break: break-all;
+    }
+
+    .warning {
+      color: #f0c060;
+      font-style: italic;
     }
 
     label {

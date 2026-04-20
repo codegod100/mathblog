@@ -1,7 +1,16 @@
 import type { Agent } from '@atproto/api'
 
-import { DOCUMENT_COLLECTION, PUBLICATION_COLLECTION } from './constants'
-import type { DraftRecordRef, LeafletDocumentRecord, PublicationRecord } from './types'
+import { DOCUMENT_COLLECTION, LEGACY_DOCUMENT_COLLECTION, PUBLICATION_COLLECTION } from './constants'
+import type { DraftRecordRef, PublicationRecord, SiteStandardDocumentRecord } from './types'
+
+export function isLegacyRemote(remote: DraftRecordRef | undefined): boolean {
+  if (!remote) return false
+  return remote.uri.includes(`/${LEGACY_DOCUMENT_COLLECTION}/`)
+}
+
+function generateRkey(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+}
 
 export async function listPublications(agent: Agent): Promise<PublicationRecord[]> {
   agent.assertAuthenticated()
@@ -22,30 +31,18 @@ export async function listPublications(agent: Agent): Promise<PublicationRecord[
 
 export async function saveDocument(
   agent: Agent,
-  record: LeafletDocumentRecord,
+  record: SiteStandardDocumentRecord,
   existing?: DraftRecordRef,
 ): Promise<DraftRecordRef> {
   agent.assertAuthenticated()
 
-  if (existing) {
-    const response = await agent.com.atproto.repo.putRecord({
-      repo: agent.assertDid,
-      collection: DOCUMENT_COLLECTION,
-      rkey: existing.rkey,
-      record,
-      validate: false,
-    })
+  const rkey = existing ? existing.rkey : generateRkey()
+  record.path = `/${rkey}`
 
-    return {
-      uri: response.data.uri,
-      cid: response.data.cid,
-      rkey: existing.rkey,
-    }
-  }
-
-  const response = await agent.com.atproto.repo.createRecord({
+  const response = await agent.com.atproto.repo.putRecord({
     repo: agent.assertDid,
     collection: DOCUMENT_COLLECTION,
+    rkey,
     record,
     validate: false,
   })
@@ -53,6 +50,6 @@ export async function saveDocument(
   return {
     uri: response.data.uri,
     cid: response.data.cid,
-    rkey: response.data.uri.split('/').at(-1) ?? '',
+    rkey,
   }
 }
