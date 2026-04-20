@@ -466,9 +466,9 @@ export class AppRoot extends LitElement {
             </div>
           </div>
 
-          <div class="save-grid-3col">
-            <div class="existing-article-control">
-              <label>
+            <div class="save-grid-3col">
+              <div class="existing-article-control">
+              <label class="existing-article-label">
                 <span>Existing article</span>
                 <select
                   .value=${this.selectedDocumentUri}
@@ -483,7 +483,9 @@ export class AppRoot extends LitElement {
                   )}
                 </select>
               </label>
-              <button class="secondary small" @click=${this.startNewArticle}>New article</button>
+              <div class="existing-article-actions">
+                <button class="secondary small new-article-btn" @click=${this.startNewArticle}>New article</button>
+              </div>
             </div>
 
             <label>
@@ -683,8 +685,26 @@ export class AppRoot extends LitElement {
 
     .existing-article-control {
       display: grid;
-      gap: 8px;
+      gap: 10px;
       align-content: start;
+      min-width: 0;
+    }
+
+    .existing-article-label {
+      margin-bottom: 0;
+    }
+
+    .existing-article-actions {
+      display: flex;
+      justify-content: flex-start;
+    }
+
+    .new-article-btn {
+      min-height: 42px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      align-self: start;
+      white-space: nowrap;
     }
 
     .editor-label {
@@ -1006,6 +1026,14 @@ export class AppRoot extends LitElement {
 
       .panel {
         padding: 18px;
+      }
+
+      .existing-article-actions {
+        justify-content: stretch;
+      }
+
+      .new-article-btn {
+        width: 100%;
       }
     }
   `
