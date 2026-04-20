@@ -8,12 +8,12 @@ import { customElement, state } from 'lit/decorators.js'
 import { unsafeHTML } from 'lit/directives/unsafe-html.js'
 
 import { isLegacyRemote, listDocuments, listPublications, saveDocument } from './leaflet-api'
-import { convertMarkdownToLeaflet } from './markdown'
 import { createAgent, initOAuth, signIn, signOut, type OAuthSession } from './oauth'
 import { loadDraft, saveDraft } from './storage'
 import type { DocumentSummary, EditorDraft, PublicationRecord, SessionSummary, SiteStandardDocumentRecord } from './types'
-import { parseMarkdownToMdDocument } from './panproto/markdown-instance'
-import { importDocument } from './document-import'
+import { parseMarkdownToMdDocument, emitMarkdownFromMdDocument } from './panproto/markdown-instance'
+import { mdDocumentToArticle, articleToMdDocument } from './panproto/lens-a'
+import { articleToLexicon, lexiconToArticle } from './panproto/lens-b'
 
 function statusText(status: EditorDraft['status']) {
   switch (status) {
@@ -211,19 +211,22 @@ export class AppRoot extends LitElement {
     }
 
     try {
-      const result = importDocument(doc.record)
+      const { article, warnings, publicationUri } = lexiconToArticle(doc.record)
+      const mdDoc = articleToMdDocument(article)
+      const markdown = emitMarkdownFromMdDocument(mdDoc)
+
       this.draft = {
         ...this.draft,
-        title: result.title,
-        description: result.description,
-        tags: result.tags,
-        markdown: result.markdown,
-        publicationUri: result.publicationUri,
+        title: article.title,
+        description: article.description,
+        tags: article.tags.join(', '),
+        markdown,
+        publicationUri,
         remote: { uri: doc.uri, cid: doc.cid, rkey: doc.rkey },
-        status: result.publicationUri ? 'published' : 'repo-draft',
+        status: publicationUri ? 'published' : 'repo-draft',
         updatedAt: new Date().toISOString(),
       }
-      this.warnings = result.warnings
+      this.warnings = warnings
       saveDraft(this.draft)
       this.statusMessage = `Loaded: ${doc.title}`
     } catch (error) {
@@ -234,17 +237,12 @@ export class AppRoot extends LitElement {
   private buildRecord(mode: 'draft' | 'publish'): SiteStandardDocumentRecord {
     const did = this.session!.sub
     const mdDoc = parseMarkdownToMdDocument(this.draft)
-    this.warnings = mdDoc.warnings
+    this.warnings = mdDoc.warnings ?? []
 
-    const { pages, warnings: convertWarnings } = convertMarkdownToLeaflet(this.draft)
-    this.warnings = [...mdDoc.warnings, ...convertWarnings]
-
-    const title = this.draft.title.trim() || 'Untitled leaflet'
-    const description = this.draft.description.trim()
-    const tags = this.draft.tags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
+    const article = mdDocumentToArticle(mdDoc)
+    article.title = this.draft.title.trim() || 'Untitled leaflet'
+    article.description = this.draft.description.trim()
+    article.tags = this.draft.tags.split(',').map((t) => t.trim()).filter(Boolean)
 
     const publicationUri = this.draft.publicationUri.trim()
     const site = mode === 'publish' && publicationUri
@@ -253,20 +251,7 @@ export class AppRoot extends LitElement {
 
     const now = new Date().toISOString()
 
-    return {
-      $type: 'site.standard.document',
-      site,
-      title,
-      publishedAt: now,
-      path: '',
-      content: {
-        $type: 'pub.leaflet.content',
-        pages,
-      },
-      ...(description ? { description } : {}),
-      ...(tags.length > 0 ? { tags } : {}),
-      updatedAt: now,
-    }
+    return articleToLexicon(article, { site, publishedAt: now, path: '' })
   }
 
   private async persistRemote(mode: 'draft' | 'publish') {
@@ -327,8 +312,26 @@ export class AppRoot extends LitElement {
     return fallback
   }
 
+  private buildRecordForPreview(): SiteStandardDocumentRecord & { warnings?: string[] } {
+    const did = this.sessionSummary?.did ?? 'did:example:local'
+    const mdDoc = parseMarkdownToMdDocument(this.draft)
+    const article = mdDocumentToArticle(mdDoc)
+    article.title = this.draft.title.trim() || 'Untitled leaflet'
+    article.description = this.draft.description.trim()
+    article.tags = this.draft.tags.split(',').map((t) => t.trim()).filter(Boolean)
+
+    const publicationUri = this.draft.publicationUri.trim()
+    const site = publicationUri || `https://leaflet.pub/p/${did}`
+    const now = new Date().toISOString()
+
+    const record = articleToLexicon(article, { site, publishedAt: now, path: '/<rkey>' })
+    return { ...record, warnings: mdDoc.warnings ?? [] }
+  }
+
   render() {
-    const { pages: previewPages, warnings: previewWarnings } = convertMarkdownToLeaflet(this.draft)
+    const previewRecord = this.sessionSummary
+      ? this.buildRecordForPreview()
+      : null
     const livePreviewHtml = renderMath(this.draft.markdown)
 
     return html`
@@ -520,37 +523,13 @@ export class AppRoot extends LitElement {
         <section class="panel preview">
           <div class="panel-header">
             <h2>Generated record preview</h2>
-            <span class="status-pill">${previewPages[0].blocks.length} blocks</span>
+            <span class="status-pill">${previewRecord?.content?.pages?.[0]?.blocks?.length ?? 0} blocks</span>
           </div>
           <pre>${JSON.stringify(
             isLegacyRemote(this.draft.remote) ? '(legacy remote — will create new site.standard.document on save)' : null,
             null,
             2,
-          )}${JSON.stringify(
-            (() => {
-              const did = this.sessionSummary?.did ?? 'did:example:local'
-              const title = this.draft.title.trim() || 'Untitled leaflet'
-              const description = this.draft.description.trim()
-              const tags = this.draft.tags.split(',').map((t) => t.trim()).filter(Boolean)
-              const publicationUri = this.draft.publicationUri.trim()
-              const site = publicationUri || `https://leaflet.pub/p/${did}`
-              const now = new Date().toISOString()
-              return {
-                $type: 'site.standard.document',
-                site,
-                title,
-                publishedAt: now,
-                path: '/<rkey>',
-                content: { $type: 'pub.leaflet.content', pages: previewPages },
-                ...(description ? { description } : {}),
-                ...(tags.length > 0 ? { tags } : {}),
-                updatedAt: now,
-                warnings: previewWarnings,
-              }
-            })(),
-            null,
-            2,
-          )}</pre>
+          )}${JSON.stringify(previewRecord, null, 2)}</pre>
         </section>
       </main>
     `

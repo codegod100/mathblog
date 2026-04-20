@@ -156,16 +156,4 @@ export type DocumentSummary = {
   record: SiteStandardDocumentRecord
 }
 
-export type DocumentImportResult = {
-  markdown: string
-  title: string
-  description: string
-  tags: string
-  publicationUri: string
-  warnings: string[]
-}
 
-export type ConversionResult = {
-  pages: LinearDocumentPage[]
-  warnings: string[]
-}
