@@ -100,6 +100,7 @@ export class AppRoot extends LitElement {
   private autosaveTimer?: number
   private stackedit = new Stackedit()
   private agent?: Agent
+  private editorRef?: HTMLTextAreaElement
 
   connectedCallback(): void {
     super.connectedCallback()
@@ -109,6 +110,7 @@ export class AppRoot extends LitElement {
   }
 
   async firstUpdated() {
+    this.editorRef = this.renderRoot?.querySelector('textarea.editor') ?? undefined
     await this.initializeSession()
   }
 
@@ -180,6 +182,58 @@ export class AppRoot extends LitElement {
     this.stackedit.openFile({
       name: `${this.draft.title || 'leaflet'}.md`,
       content: { text: this.draft.markdown },
+    })
+  }
+
+  private getEditor(): HTMLTextAreaElement | null {
+    return this.editorRef ?? this.renderRoot?.querySelector('textarea.editor') ?? null
+  }
+
+  private wrapSelection(before: string, after: string, placeholder: string) {
+    const el = this.getEditor()
+    if (!el) return
+    el.focus()
+    const { selectionStart: s, selectionEnd: e, value } = el
+    const selected = value.slice(s, e) || placeholder
+    const replacement = before + selected + after
+    const next = value.slice(0, s) + replacement + value.slice(e)
+    this.applyDraftChange('markdown', next)
+    requestAnimationFrame(() => {
+      el.focus()
+      const offset = s + before.length
+      const end = offset + selected.length
+      el.setSelectionRange(offset, end)
+    })
+  }
+
+  private prefixLines(prefix: string, placeholder: string) {
+    const el = this.getEditor()
+    if (!el) return
+    el.focus()
+    const { selectionStart: s, selectionEnd: e, value } = el
+    const selected = value.slice(s, e) || placeholder
+    const lines = selected.split('\n').map((l: string) => prefix + l).join('\n')
+    const next = value.slice(0, s) + lines + value.slice(e)
+    this.applyDraftChange('markdown', next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(s + prefix.length, s + lines.length)
+    })
+  }
+
+  private insertLink() {
+    const el = this.getEditor()
+    if (!el) return
+    el.focus()
+    const { selectionStart: s, selectionEnd: e, value } = el
+    const selected = value.slice(s, e) || 'link text'
+    const replacement = `[${selected}](url)`
+    const next = value.slice(0, s) + replacement + value.slice(e)
+    this.applyDraftChange('markdown', next)
+    requestAnimationFrame(() => {
+      el.focus()
+      const urlStart = s + selected.length + 3
+      el.setSelectionRange(urlStart, urlStart + 3)
     })
   }
 
@@ -409,8 +463,19 @@ export class AppRoot extends LitElement {
           </label>
 
           <div class="editor-workspace">
-            <label>
-              <span>Markdown</span>
+            <div class="editor-column">
+              <span class="editor-label">Markdown</span>
+              <div class="md-toolbar">
+                <button class="toolbar-btn" @click=${() => this.prefixLines('# ', 'Heading')} title="Heading 1">H1</button>
+                <button class="toolbar-btn" @click=${() => this.prefixLines('## ', 'Heading')} title="Heading 2">H2</button>
+                <button class="toolbar-btn" @click=${() => this.wrapSelection('**', '**', 'bold text')} title="Bold"><b>B</b></button>
+                <button class="toolbar-btn" @click=${() => this.wrapSelection('*', '*', 'italic text')} title="Italic"><i>I</i></button>
+                <button class="toolbar-btn" @click=${() => this.wrapSelection('`', '`', 'code')} title="Inline code">&lt;/&gt;</button>
+                <button class="toolbar-btn" @click=${() => this.insertLink()} title="Link">🔗</button>
+                <button class="toolbar-btn" @click=${() => this.prefixLines('> ', 'quote')} title="Blockquote">&gt;</button>
+                <button class="toolbar-btn" @click=${() => this.prefixLines('- ', 'list item')} title="Unordered list">&bull;</button>
+                <button class="toolbar-btn" @click=${() => this.wrapSelection('$', '$', 'x^2')} title="Inline math">$</button>
+              </div>
               <textarea
                 class="editor"
                 rows="18"
@@ -418,7 +483,7 @@ export class AppRoot extends LitElement {
                 @input=${(event: Event) => this.applyDraftChange('markdown', (event.target as HTMLTextAreaElement).value)}
                 @blur=${this.saveImmediately}
               ></textarea>
-            </label>
+            </div>
 
             <section class="live-preview-panel">
               <div class="live-preview-header">
@@ -496,8 +561,8 @@ export class AppRoot extends LitElement {
               <h3>Remote record</h3>
               ${this.draft.remote
                 ? html`
-                    <p class="mono">URI: ${this.draft.remote.uri}</p>
-                    <p class="mono">CID: ${this.draft.remote.cid}</p>
+                    <p class="mono wrap">URI: ${this.draft.remote.uri}</p>
+                    <p class="mono wrap">CID: ${this.draft.remote.cid}</p>
                     ${isLegacyRemote(this.draft.remote)
                       ? html`<p class="warning">Legacy pub.leaflet.document — next save creates a new site.standard.document</p>`
                       : ''}
@@ -507,7 +572,7 @@ export class AppRoot extends LitElement {
 
             <div class="meta-box">
               <h3>Status</h3>
-              <p>${this.statusMessage}</p>
+              <p class="status-message">${this.statusMessage}</p>
               <p class="muted">Last updated: ${new Date(this.draft.updatedAt).toLocaleString()}</p>
             </div>
 
@@ -682,6 +747,62 @@ export class AppRoot extends LitElement {
       line-height: 1.5;
     }
 
+    .editor-column {
+      display: grid;
+      gap: 0;
+      min-width: 0;
+    }
+
+    .editor-label {
+      color: #d4d9f1;
+      font-size: 0.92rem;
+      margin-bottom: 8px;
+    }
+
+    .md-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px 8px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      background: rgba(14, 18, 33, 0.85);
+      border: 1px solid rgba(136, 143, 193, 0.18);
+    }
+
+    .toolbar-btn {
+      cursor: pointer;
+      padding: 5px 10px;
+      font-size: 0.85rem;
+      line-height: 1;
+      border-radius: 8px;
+      border: 1px solid rgba(136, 143, 193, 0.22);
+      background: rgba(8, 11, 24, 0.9);
+      color: #d4d9f1;
+      transition: background 0.1s ease, border-color 0.1s ease;
+    }
+
+    .toolbar-btn:hover {
+      background: rgba(125, 92, 255, 0.18);
+      border-color: rgba(170, 181, 255, 0.45);
+      transform: none;
+    }
+
+    .toolbar-btn b,
+    .toolbar-btn i {
+      font: inherit;
+    }
+
+    .status-message {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .wrap {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
     .editor-workspace {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -716,7 +837,7 @@ export class AppRoot extends LitElement {
       margin-top: 18px;
     }
 
-    .editor-workspace > label {
+    .editor-workspace > .editor-column {
       margin-bottom: 0;
     }
 
