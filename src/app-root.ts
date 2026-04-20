@@ -7,11 +7,13 @@ import { LitElement, css, html, unsafeCSS } from 'lit'
 import { customElement, state } from 'lit/decorators.js'
 import { unsafeHTML } from 'lit/directives/unsafe-html.js'
 
-import { isLegacyRemote, listPublications, saveDocument } from './leaflet-api'
+import { isLegacyRemote, listDocuments, listPublications, saveDocument } from './leaflet-api'
 import { convertMarkdownToLeaflet } from './markdown'
 import { createAgent, initOAuth, signIn, signOut, type OAuthSession } from './oauth'
 import { loadDraft, saveDraft } from './storage'
-import type { EditorDraft, PublicationRecord, SessionSummary, SiteStandardDocumentRecord } from './types'
+import type { DocumentSummary, EditorDraft, PublicationRecord, SessionSummary, SiteStandardDocumentRecord } from './types'
+import { parseMarkdownToMdDocument } from './panproto/markdown-instance'
+import { importDocument } from './document-import'
 
 function statusText(status: EditorDraft['status']) {
   switch (status) {
@@ -87,11 +89,13 @@ export class AppRoot extends LitElement {
   @state() private session?: OAuthSession
   @state() private sessionSummary?: SessionSummary
   @state() private publications: PublicationRecord[] = []
+  @state() private documents: DocumentSummary[] = []
   @state() private handleInput = ''
   @state() private isBusy = true
   @state() private isSaving = false
   @state() private statusMessage = 'Loading…'
   @state() private warnings: string[] = []
+  @state() private selectedDocumentUri = ''
 
   private autosaveTimer?: number
   private stackedit = new Stackedit()
@@ -119,6 +123,7 @@ export class AppRoot extends LitElement {
         this.agent = createAgent(result.session)
         await this.populateSessionDetails()
         await this.refreshPublications()
+        await this.refreshDocuments()
         this.statusMessage = result.state ? 'Signed in and callback processed.' : 'Session restored.'
       } else {
         this.statusMessage = 'Working locally. Sign in when you want repo access.'
@@ -187,10 +192,52 @@ export class AppRoot extends LitElement {
     }
   }
 
+  private async refreshDocuments() {
+    if (!this.agent) return
+    try {
+      this.documents = await listDocuments(this.agent)
+    } catch (error) {
+      this.statusMessage = this.describeError(error, 'Failed to load documents')
+    }
+  }
+
+  private async loadSelectedDocument() {
+    if (!this.agent || !this.selectedDocumentUri) return
+
+    const doc = this.documents.find((d) => d.uri === this.selectedDocumentUri)
+    if (!doc) {
+      this.statusMessage = 'Document not found in list'
+      return
+    }
+
+    try {
+      const result = importDocument(doc.record)
+      this.draft = {
+        ...this.draft,
+        title: result.title,
+        description: result.description,
+        tags: result.tags,
+        markdown: result.markdown,
+        publicationUri: result.publicationUri,
+        remote: { uri: doc.uri, cid: doc.cid, rkey: doc.rkey },
+        status: result.publicationUri ? 'published' : 'repo-draft',
+        updatedAt: new Date().toISOString(),
+      }
+      this.warnings = result.warnings
+      saveDraft(this.draft)
+      this.statusMessage = `Loaded: ${doc.title}`
+    } catch (error) {
+      this.statusMessage = this.describeError(error, 'Failed to load document')
+    }
+  }
+
   private buildRecord(mode: 'draft' | 'publish'): SiteStandardDocumentRecord {
     const did = this.session!.sub
-    const { pages, warnings } = convertMarkdownToLeaflet(this.draft)
-    this.warnings = warnings
+    const mdDoc = parseMarkdownToMdDocument(this.draft)
+    this.warnings = mdDoc.warnings
+
+    const { pages, warnings: convertWarnings } = convertMarkdownToLeaflet(this.draft)
+    this.warnings = [...mdDoc.warnings, ...convertWarnings]
 
     const title = this.draft.title.trim() || 'Untitled leaflet'
     const description = this.draft.description.trim()
@@ -265,6 +312,8 @@ export class AppRoot extends LitElement {
       this.sessionSummary = undefined
       this.agent = undefined
       this.publications = []
+      this.documents = []
+      this.selectedDocumentUri = ''
       this.statusMessage = 'Signed out. Local draft kept in browser storage.'
     } catch (error) {
       this.statusMessage = this.describeError(error, 'Failed to sign out')
@@ -380,10 +429,29 @@ export class AppRoot extends LitElement {
         <section class="panel save-panel">
           <div class="panel-header">
             <h2>Publication + Save</h2>
-            <button class="secondary small" ?disabled=${!this.sessionSummary} @click=${this.refreshPublications}>Refresh publications</button>
+            <div class="actions">
+              <button class="secondary small" ?disabled=${!this.sessionSummary} @click=${this.refreshPublications}>Refresh pubs</button>
+              <button class="secondary small" ?disabled=${!this.sessionSummary} @click=${this.refreshDocuments}>Refresh docs</button>
+            </div>
           </div>
 
-          <div class="save-grid">
+          <div class="save-grid-3col">
+            <label>
+              <span>Open existing article</span>
+              <select
+                .value=${this.selectedDocumentUri}
+                @change=${(event: Event) => {
+                  this.selectedDocumentUri = (event.target as HTMLSelectElement).value
+                  if (this.selectedDocumentUri) this.loadSelectedDocument()
+                }}
+              >
+                <option value="">New article</option>
+                ${this.documents.map(
+                  (doc) => html`<option value=${doc.uri}>${doc.title}</option>`,
+                )}
+              </select>
+            </label>
+
             <label>
               <span>Choose publication</span>
               <select
@@ -649,6 +717,7 @@ export class AppRoot extends LitElement {
 
     .draft-meta-grid,
     .save-grid,
+    .save-grid-3col,
     .save-meta-grid {
       display: grid;
       gap: 16px;
@@ -657,6 +726,10 @@ export class AppRoot extends LitElement {
     .draft-meta-grid,
     .save-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .save-grid-3col {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .save-meta-grid {
@@ -858,6 +931,7 @@ export class AppRoot extends LitElement {
       .auth-panel,
       .draft-meta-grid,
       .save-grid,
+      .save-grid-3col,
       .save-meta-grid,
       .editor-workspace {
         grid-template-columns: 1fr;

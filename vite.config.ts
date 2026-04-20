@@ -9,4 +9,10 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 6080,
   },
+  optimizeDeps: {
+    exclude: ['@panproto/core'],
+  },
+  build: {
+    target: 'esnext',
+  },
 })

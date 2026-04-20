@@ -143,6 +143,28 @@ export type SiteStandardDocumentRecord = {
   updatedAt?: string
 }
 
+export type DocumentSummary = {
+  uri: string
+  cid: string
+  rkey: string
+  title: string
+  site: string
+  description?: string
+  tags?: string[]
+  publishedAt?: string
+  updatedAt?: string
+  record: SiteStandardDocumentRecord
+}
+
+export type DocumentImportResult = {
+  markdown: string
+  title: string
+  description: string
+  tags: string
+  publicationUri: string
+  warnings: string[]
+}
+
 export type ConversionResult = {
   pages: LinearDocumentPage[]
   warnings: string[]
