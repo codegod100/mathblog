@@ -223,6 +223,20 @@ export class AppRoot extends LitElement {
     })
   }
 
+  private insertTable() {
+    const el = this.getEditor()
+    if (!el) return
+    el.focus()
+    const { selectionStart: s, value } = el
+    const table = '\n| Column 1 | Column 2 | Column 3 |\n| -------- | -------- | -------- |\n| Cell 1   | Cell 2   | Cell 3   |\n'
+    const next = value.slice(0, s) + table + value.slice(s)
+    this.applyDraftChange('markdown', next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(s + 1, s + table.length - 1)
+    })
+  }
+
   private async refreshPublications() {
     if (!this.agent) return
     try {
@@ -446,6 +460,7 @@ export class AppRoot extends LitElement {
                 <button class="toolbar-btn" @click=${() => this.prefixLines('> ', 'quote')} title="Blockquote">&gt;</button>
                 <button class="toolbar-btn" @click=${() => this.prefixLines('- ', 'list item')} title="Unordered list">&bull;</button>
                 <button class="toolbar-btn" @click=${() => this.wrapSelection('$', '$', 'x^2')} title="Inline math">$</button>
+                <button class="toolbar-btn" @click=${() => this.insertTable()} title="Table">&#9644;</button>
               </div>
               <textarea
                 class="editor"
