@@ -38,6 +38,7 @@ export function renderMath(markdown: string): string {
           katex.renderToString(tex, {
             displayMode: true,
             throwOnError: false,
+            trust: true,
           }),
         )
       } catch {
@@ -52,6 +53,7 @@ export function renderMath(markdown: string): string {
         katex.renderToString(expression.trim(), {
           displayMode: true,
           throwOnError: false,
+          trust: true,
         }),
       )
     } catch {
@@ -65,6 +67,7 @@ export function renderMath(markdown: string): string {
         katex.renderToString(expression.trim(), {
           displayMode: false,
           throwOnError: false,
+          trust: true,
         }),
       )
     } catch {
