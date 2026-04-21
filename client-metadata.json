@@ -1,0 +1,14 @@
+{
+	"client_id": "https://codegod100.github.io/mathblog/client-metadata.json",
+	"client_name": "Mathblog",
+	"client_uri": "https://github.com/codegod100/mathblog",
+	"redirect_uris": [
+		"https://codegod100.github.io/mathblog/oauth-callback.html"
+	],
+	"scope": "atproto transition:generic",
+	"grant_types": ["authorization_code", "refresh_token"],
+	"response_types": ["code"],
+	"token_endpoint_auth_method": "none",
+	"application_type": "native",
+	"dpop_bound_access_tokens": true
+}

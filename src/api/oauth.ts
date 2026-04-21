@@ -10,13 +10,12 @@ import {
 import { Notice } from 'obsidian';
 import { compositeResolver } from './identity';
 
-const REDIRECT_URI = 'obsidian://mathblog-oauth';
+// These must match the values in client-metadata.json at the repo root.
+// OAuth requires a real HTTPS redirect URI; the web page at this URL
+// redirects back into Obsidian via the obsidian:// protocol.
+const CLIENT_ID = 'https://codegod100.github.io/mathblog/client-metadata.json';
+const REDIRECT_URI = 'https://codegod100.github.io/mathblog/oauth-callback.html';
 const SCOPE = 'atproto transition:generic';
-
-const OAUTH_METADATA = {
-	client_id: `http://localhost?redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPE)}`,
-	redirect_uri: REDIRECT_URI,
-};
 
 export class OAuthHandler {
 	private callbackResolver: ((value: URLSearchParams) => void) | null = null;
@@ -25,7 +24,10 @@ export class OAuthHandler {
 
 	constructor() {
 		configureOAuth({
-			metadata: OAUTH_METADATA,
+			metadata: {
+				client_id: CLIENT_ID,
+				redirect_uri: REDIRECT_URI,
+			},
 			identityResolver: compositeResolver,
 		});
 	}
