@@ -1,25 +1,18 @@
 {
-  "compilerOptions": {
-    "target": "es2023",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
-    "module": "esnext",
-    "lib": ["ES2023", "DOM"],
-    "types": ["vite/client"],
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-
-    /* Linting */
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
-  },
-  "include": ["src"]
+	"compilerOptions": {
+		"baseUrl": ".",
+		"inlineSourceMap": true,
+		"inlineSources": true,
+		"module": "ESNext",
+		"target": "ES2018",
+		"allowJs": true,
+		"noImplicitAny": true,
+		"moduleResolution": "bundler",
+		"importHelpers": true,
+		"isolatedModules": true,
+		"strictNullChecks": true,
+		"lib": ["DOM", "ES2021"],
+		"skipLibCheck": true
+	},
+	"include": ["src/**/*.ts"]
 }

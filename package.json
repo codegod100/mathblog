@@ -1,26 +1,27 @@
 {
-  "name": "mathblog",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "tsx watch server.ts",
-    "build": "vite build",
-    "start": "NODE_ENV=production tsx server.ts"
-  },
-  "dependencies": {
-    "@atproto/api": "^0.19.9",
-    "@atproto/oauth-client-browser": "^0.3.41",
-    "@hono/node-server": "^1.19.14",
-    "@panproto/core": "^0.34.1",
-    "hono": "^4.12.14",
-    "katex": "^0.16.45",
-    "lit": "^3.3.2",
-    "marked": "^18.0.2"
-  },
-  "devDependencies": {
-    "tsx": "^4.21.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.0.9"
-  }
+	"name": "mathblog-obsidian",
+	"version": "0.1.0",
+	"description": "Publish Obsidian notes as site.standard.document on AT Protocol, with KaTeX math support.",
+	"main": "main.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+	},
+	"keywords": [],
+	"license": "MIT",
+	"dependencies": {
+		"@atcute/client": "^4.2.1",
+		"@atcute/identity-resolver": "^1.2.2",
+		"@atcute/oauth-browser-client": "^3.0.0",
+		"katex": "^0.16.45",
+		"marked": "^18.0.2"
+	},
+	"devDependencies": {
+		"@types/node": "^16.11.6",
+		"esbuild": "0.25.5",
+		"obsidian": "latest",
+		"tslib": "2.4.0",
+		"typescript": "^5.8.3"
+	}
 }
