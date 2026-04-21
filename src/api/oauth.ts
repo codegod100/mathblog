@@ -10,10 +10,14 @@ import {
 import { Notice } from 'obsidian';
 import { compositeResolver } from './identity';
 
+// Cache-busting parameter forces PDS to re-fetch client metadata if an earlier
+// version was cached (e.g. before GitHub Pages was enabled or metadata was fixed).
+const CACHE_BUST = 'v=2';
+
 // These must match the values in client-metadata.json at the repo root.
 // OAuth requires a real HTTPS redirect URI; the web page at this URL
 // redirects back into Obsidian via the obsidian:// protocol.
-const CLIENT_ID = 'https://codegod100.github.io/mathblog/client-metadata.json';
+const CLIENT_ID = `https://codegod100.github.io/mathblog/client-metadata.json?${CACHE_BUST}`;
 const REDIRECT_URI = 'https://codegod100.github.io/mathblog/oauth-callback.html';
 const SCOPE = 'atproto transition:generic';
 
@@ -49,6 +53,9 @@ export class OAuthHandler {
 			target: { type: 'account', identifier: identifier as any },
 			scope: SCOPE,
 		});
+
+		// Small delay to let the auth window settle (matches atmosphere plugin)
+		await new Promise((resolve) => setTimeout(resolve, 200));
 
 		const waitForCallback = new Promise<URLSearchParams>((resolve, reject) => {
 			this.callbackResolver = resolve;

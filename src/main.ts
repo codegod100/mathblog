@@ -39,7 +39,7 @@ export default class MathblogPlugin extends Plugin {
 		this.addCommand({
 			id: 'publish-note',
 			name: 'Publish note to Leaflet',
-			editorCheckCallback: (checking: boolean) => {
+			checkCallback: (checking: boolean) => {
 				const file = this.app.workspace.getActiveFile();
 				if (!file) return false;
 				if (!checking) {

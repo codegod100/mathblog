@@ -1,5 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type MathblogPlugin from "./main";
+import { isActorIdentifier } from "@atcute/lexicons/syntax";
 
 export interface MathblogSettings {
 	did?: string;
@@ -59,6 +60,10 @@ export class SettingTab extends PluginSettingTab {
 							const handle = handleInput.value.trim();
 							if (!handle) {
 								new Notice("Please enter a handle.");
+								return;
+							}
+							if (!isActorIdentifier(handle)) {
+								new Notice("Invalid handle format. Use something like user.bsky.social");
 								return;
 							}
 							try {
