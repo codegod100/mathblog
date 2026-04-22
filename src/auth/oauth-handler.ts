@@ -17,8 +17,8 @@ export type OAuthConfig = {
 	storageName?: string;
 };
 
-const IDENTITY_TIMEOUT_MS = 10_000;
-const TOKEN_TIMEOUT_MS = 15_000;
+const IDENTITY_TIMEOUT_MS = 20_000;
+const CALLBACK_WAIT_MS = 5 * 60_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	return Promise.race([
@@ -33,6 +33,7 @@ export class OAuthHandler {
 	private callbackResolver: ((value: URLSearchParams) => void) | null = null;
 	private callbackRejecter: ((reason?: Error) => void) | null = null;
 	private callbackTimeout: ReturnType<typeof setTimeout> | null = null;
+	private pendingState: string | null = null;
 	private readonly config: OAuthConfig;
 
 	constructor(config: OAuthConfig) {
@@ -59,24 +60,36 @@ export class OAuthHandler {
 				const error = params.get('error') || 'unknown_error';
 				const description = params.get('error_description') || error;
 				this.callbackRejecter(new Error(`OAuth error: ${description}`));
+			} else if (this.pendingState && params.get('state') !== this.pendingState) {
+				this.callbackRejecter(new Error('State mismatch — possible stale callback'));
 			} else {
 				this.callbackResolver(params);
 			}
 
 			this.callbackResolver = null;
 			this.callbackRejecter = null;
+			this.pendingState = null;
 		}
 	}
 
 	async authorize(identifier: string): Promise<Session> {
-		const authUrl = await withTimeout(
-			createAuthorizationUrl({
-				target: { type: 'account', identifier: identifier as any },
-				scope: this.config.scope,
-			}),
-			IDENTITY_TIMEOUT_MS,
-			'Identity resolution / PAR',
-		);
+		let authUrl: URL;
+		try {
+			authUrl = await withTimeout(
+				createAuthorizationUrl({
+					target: { type: 'account', identifier: identifier as any },
+					scope: this.config.scope,
+				}),
+				IDENTITY_TIMEOUT_MS,
+				'Identity resolution / PAR',
+			);
+		} catch (err) {
+			new Notice('Failed to start authorization: ' + (err instanceof Error ? err.message : String(err)));
+			throw err;
+		}
+
+		// Extract state from the auth URL for validation later
+		this.pendingState = authUrl.searchParams.get('state');
 
 		// Small delay to let the auth window settle (matches atmosphere plugin)
 		await new Promise((resolve) => setTimeout(resolve, 200));
@@ -89,19 +102,22 @@ export class OAuthHandler {
 					this.callbackRejecter(new Error('OAuth callback timed out after 5 minutes'));
 					this.callbackResolver = null;
 					this.callbackRejecter = null;
+					this.pendingState = null;
 				}
-			}, 5 * 60_000);
+			}, CALLBACK_WAIT_MS);
 		});
 
-		window.open(authUrl, '_blank');
+		window.open(authUrl.toString(), '_blank');
 		new Notice('Continue login in the browser');
 
 		const params = await waitForCallback;
-		const { session } = await withTimeout(
-			finalizeAuthorization(params),
-			TOKEN_TIMEOUT_MS,
-			'Token exchange',
-		);
+		new Notice('Authorization callback received. Exchanging tokens...');
+
+		// Do NOT wrap finalizeAuthorization in our own timeout.
+		// The library handles its own internal retry/timeout logic.
+		// Wrapping it causes race conditions where the library continues
+		// internally after our timeout fires, confusing the UI state.
+		const { session } = await finalizeAuthorization(params);
 		return session;
 	}
 

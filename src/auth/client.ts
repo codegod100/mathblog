@@ -29,7 +29,9 @@ export class ATPClient extends Client {
 		this.hh.agent = new OAuthUserAgent(session);
 		const did = this.hh.agent?.session.info.sub;
 		if (did) {
+			new Notice('Tokens received. Resolving identity...');
 			this.actor = await this.hh.getActor(did);
+			new Notice(`Logged in as @${this.actor.handle ?? this.actor.did}`);
 		}
 	}
 
@@ -58,7 +60,9 @@ export class ATPClient extends Client {
 	}
 }
 
-const ACTOR_TIMEOUT_MS = 10_000;
+import { Notice } from "obsidian";
+
+const ACTOR_TIMEOUT_MS = 20_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
 	return Promise.race([

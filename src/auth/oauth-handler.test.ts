@@ -65,7 +65,8 @@ describe('OAuthHandler.authorize + handleCallback happy path', () => {
 
 	it('should resolve authorize() with valid callback params', async () => {
 		const { createAuthorizationUrl, finalizeAuthorization } = await import('@atcute/oauth-browser-client')
-		vi.mocked(createAuthorizationUrl).mockResolvedValueOnce(new URL('https://example.com/auth') as any)
+		const testUrl = new URL('https://example.com/auth?state=teststate123')
+		vi.mocked(createAuthorizationUrl).mockResolvedValueOnce(testUrl)
 		vi.mocked(finalizeAuthorization).mockResolvedValueOnce({ session: { did: 'did:plc:test' } as any, state: null })
 
 		const handler = new OAuthHandler(TEST_CONFIG)
@@ -74,7 +75,7 @@ describe('OAuthHandler.authorize + handleCallback happy path', () => {
 		// Wait for the internal 200ms settle delay + a bit
 		await new Promise(r => setTimeout(r, 300))
 
-		const params = new URLSearchParams({ code: 'abc123', state: 'xyz' })
+		const params = new URLSearchParams({ code: 'abc123', state: 'teststate123' })
 		handler.handleCallback(params)
 
 		const session = await authPromise
@@ -83,7 +84,8 @@ describe('OAuthHandler.authorize + handleCallback happy path', () => {
 
 	it('should reject authorize() when callback contains error param', async () => {
 		const { createAuthorizationUrl } = await import('@atcute/oauth-browser-client')
-		vi.mocked(createAuthorizationUrl).mockResolvedValueOnce(new URL('https://example.com/auth') as any)
+		const testUrl = new URL('https://example.com/auth?state=teststate456')
+		vi.mocked(createAuthorizationUrl).mockResolvedValueOnce(testUrl)
 
 		const handler = new OAuthHandler(TEST_CONFIG)
 		const authPromise = handler.authorize('user.bsky.social')
@@ -94,6 +96,23 @@ describe('OAuthHandler.authorize + handleCallback happy path', () => {
 		handler.handleCallback(params)
 
 		await expect(authPromise).rejects.toThrow('User denied access')
+	})
+
+	it('should reject on state mismatch', async () => {
+		const { createAuthorizationUrl } = await import('@atcute/oauth-browser-client')
+		const testUrl = new URL('https://example.com/auth?state=correctstate')
+		vi.mocked(createAuthorizationUrl).mockResolvedValueOnce(testUrl)
+
+		const handler = new OAuthHandler(TEST_CONFIG)
+		const authPromise = handler.authorize('user.bsky.social')
+
+		await new Promise(r => setTimeout(r, 300))
+
+		// Send wrong state back
+		const params = new URLSearchParams({ code: 'abc123', state: 'wrongstate' })
+		handler.handleCallback(params)
+
+		await expect(authPromise).rejects.toThrow('State mismatch')
 	})
 
 	it('should ignore stale callbacks (no pending authorize)', () => {
@@ -122,31 +141,9 @@ describe('OAuthHandler timeouts', () => {
 		const handler = new OAuthHandler(TEST_CONFIG)
 		const promise = handler.authorize('user.bsky.social')
 
-		await vi.advanceTimersByTimeAsync(11_000)
+		await vi.advanceTimersByTimeAsync(21_000)
 
 		await expect(promise).rejects.toThrow('Identity resolution / PAR timed out')
-		vi.useRealTimers()
-	})
-
-	it('should reject if finalizeAuthorization hangs', async () => {
-		vi.useFakeTimers()
-
-		const { createAuthorizationUrl, finalizeAuthorization } = await import('@atcute/oauth-browser-client')
-		vi.mocked(createAuthorizationUrl).mockResolvedValueOnce(new URL('https://example.com/auth') as any)
-		vi.mocked(finalizeAuthorization).mockImplementationOnce(() => new Promise(() => {}))
-
-		const handler = new OAuthHandler(TEST_CONFIG)
-		const authPromise = handler.authorize('user.bsky.social')
-
-		await vi.advanceTimersByTimeAsync(300)
-
-		const params = new URLSearchParams({ code: 'abc123', state: 'xyz' })
-		handler.handleCallback(params)
-
-		// Advance past the 15s token timeout
-		await vi.advanceTimersByTimeAsync(16_000)
-
-		await expect(authPromise).rejects.toThrow('Token exchange timed out')
 		vi.useRealTimers()
 	})
 })

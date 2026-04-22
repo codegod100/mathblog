@@ -63,9 +63,18 @@ export class AuthSettingsSection {
 								new Notice("Invalid handle format. Use something like user.bsky.social");
 								return;
 							}
+
+							// Safety timer: guarantees button is reset even if auth hangs indefinitely
+							const safetyTimer = setTimeout(() => {
+								button.setDisabled(false);
+								button.setButtonText("Log in");
+								new Notice("Login attempt timed out. Please try again.");
+							}, 60_000);
+
 							button.setDisabled(true);
 							button.setButtonText("Logging in...");
 							new Notice("Opening browser for authorization...");
+
 							try {
 								await this.auth.login(handle);
 								this.onStateChange?.();
@@ -75,6 +84,7 @@ export class AuthSettingsSection {
 								const errorMessage = error instanceof Error ? error.message : String(error);
 								new Notice(`Authentication failed: ${errorMessage}`);
 							} finally {
+								clearTimeout(safetyTimer);
 								button.setDisabled(false);
 								button.setButtonText("Log in");
 							}
