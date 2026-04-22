@@ -26,7 +26,8 @@ describe('parseMarkdownToMdDocument', () => {
 		expect(doc.blocks[0].$type).toBe('paragraph')
 		if (doc.blocks[0].$type === 'paragraph') {
 			const text = doc.blocks[0].segments.map(s => s.text).join('')
-			expect(text).toContain('$x^2$')
+			expect(text).toContain('x²')
+			expect(text).not.toContain('$x^2$')
 		}
 	})
 
@@ -62,10 +63,11 @@ describe('emitMarkdownFromMdDocument', () => {
 		expect(out).toContain('$$\nx^2\n$$')
 	})
 
-	it('should emit inline math as $...$', () => {
+	it('should emit inline math as unicode text', () => {
 		const doc = parseMarkdownToMdDocument(draft('Hello $x^2$ world'))
 		const out = emitMarkdownFromMdDocument(doc)
-		expect(out).toContain('$x^2$')
+		expect(out).toContain('x²')
+		expect(out).not.toContain('$x^2$')
 	})
 
 	it('should emit tables with correct delimiter alignment', () => {
@@ -85,11 +87,11 @@ describe('round-trip', () => {
 		expect(out).toBe(md)
 	})
 
-	it('should preserve inline math through round-trip', () => {
+	it('should preserve inline math through round-trip as unicode', () => {
 		const md = 'Let $v^i$ be a vector.'
 		const doc = parseMarkdownToMdDocument(draft(md))
 		const out = emitMarkdownFromMdDocument(doc)
-		expect(out).toBe(md)
+		expect(out).toBe('Let vⁱ be a vector.')
 	})
 
 	it('should preserve display math through round-trip', () => {

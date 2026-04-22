@@ -266,13 +266,14 @@ describe('lexiconToArticle regression', () => {
 		}
 	})
 
-	it('should NOT split blocks with only inline $...$ math', () => {
+	it('should convert inline $...$ to unicode in text blocks', () => {
 		const { article } = lexiconToArticle(RECORD)
 		const block3 = article.blocks[3]
 		expect(block3.$type).toBe('text')
 		if (block3.$type === 'text') {
 			const text = block3.segments.map(s => s.text).join('')
-			expect(text).toContain('$v^i$')
+			expect(text).toContain('vⁱ')
+			expect(text).not.toContain('$v^i$')
 			// Should NOT have split into a math block
 			const idx = article.blocks.indexOf(block3)
 			expect(article.blocks[idx + 1].$type).not.toBe('math')

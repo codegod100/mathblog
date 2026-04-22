@@ -18,10 +18,20 @@ import type {
 } from '../atproto/types'
 import { parseKatexGridTex, tableToKatexGridTex } from '../table-katex'
 
+import { texToUnicode } from '../latex-to-unicode'
+
 import type { Article, ArticleBlock, ArticleListItem, ArticleSegment } from './lens-a'
 
 function byteLength(value: string): number {
 	return new TextEncoder().encode(value).length
+}
+
+function convertInlineMathInSegments(segments: ArticleSegment[]): ArticleSegment[] {
+	const INLINE_MATH_RE = /(?<!\$)\$([^$\n]+?)\$(?!\$)/g
+	return segments.map(seg => ({
+		...seg,
+		text: seg.text.replace(INLINE_MATH_RE, (_, expr: string) => texToUnicode(expr)),
+	}))
 }
 
 function filterAndAdjustFacets(facets: LeafletFacet[] | undefined, segByteStart: number, segByteEnd: number): LeafletFacet[] | undefined {
@@ -44,7 +54,10 @@ function splitTextBlockIntoArticleBlocks(plaintext: string, facets: LeafletFacet
 		const beforeText = plaintext.slice(lastIndex, match.index)
 		if (beforeText) {
 			const beforeFacets = filterAndAdjustFacets(facets, lastIndex, match.index)
-			blocks.push({ $type: 'text', segments: plaintextAndFacetsToSegments(beforeText, beforeFacets) })
+			blocks.push({
+				$type: 'text',
+				segments: convertInlineMathInSegments(plaintextAndFacetsToSegments(beforeText, beforeFacets)),
+			})
 		}
 		blocks.push({ $type: 'math', tex: match[1].trim() })
 		lastIndex = regex.lastIndex
@@ -53,10 +66,16 @@ function splitTextBlockIntoArticleBlocks(plaintext: string, facets: LeafletFacet
 	const afterText = plaintext.slice(lastIndex)
 	if (afterText) {
 		const afterFacets = filterAndAdjustFacets(facets, lastIndex, plaintext.length)
-		blocks.push({ $type: 'text', segments: plaintextAndFacetsToSegments(afterText, afterFacets) })
+		blocks.push({
+			$type: 'text',
+			segments: convertInlineMathInSegments(plaintextAndFacetsToSegments(afterText, afterFacets)),
+		})
 	}
 
-	return blocks.length > 0 ? blocks : [{ $type: 'text', segments: plaintextAndFacetsToSegments(plaintext, facets) }]
+	return blocks.length > 0 ? blocks : [{
+		$type: 'text',
+		segments: convertInlineMathInSegments(plaintextAndFacetsToSegments(plaintext, facets)),
+	}]
 }
 
 function makeFacet(byteStart: number, byteEnd: number, feature: FacetFeature): LeafletFacet {

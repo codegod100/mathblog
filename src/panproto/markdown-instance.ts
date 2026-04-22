@@ -1,6 +1,7 @@
 import { Lexer, type Tokens } from 'marked'
 
 import type { EditorDraft } from '../atproto/types'
+import { texToUnicode } from '../latex-to-unicode'
 
 type InlineNode = Tokens.Generic | Tokens.Link | Tokens.Strong | Tokens.Em | Tokens.Codespan | Tokens.Del | Tokens.Text
 
@@ -52,64 +53,14 @@ export type MdDocument = {
 const DISPLAY_MATH_RE = /^\s*\$\$\s*([\s\S]+?)\s*\$\$\s*$/
 const INLINE_MATH_RE = /(?<!\$)\$([^$\n]+?)\$(?!\$)/g
 
-type ProtectedInlineMath = {
-	text: string
-	restores: Map<string, string>
-}
-
-function protectInlineMath(text: string): ProtectedInlineMath {
-	const restores = new Map<string, string>()
-	let index = 0
-	const protectedText = text.replace(INLINE_MATH_RE, (match) => {
-		const key = `@@INLINE_MATH_${index++}@@`
-		restores.set(key, match)
-		return key
-	})
-	return { text: protectedText, restores }
-}
-
-function restoreInlineMathSegments(segments: Segment[], restores: Map<string, string>): Segment[] {
-	if (restores.size === 0) return segments
-
-	const restored: Segment[] = []
-	for (const segment of segments) {
-		const exact = restores.get(segment.text)
-		if (exact) {
-			restored.push({ text: exact })
-			continue
-		}
-
-		let cursor = 0
-		const matches = [...restores.entries()]
-			.map(([key, value]) => ({ key, value, index: segment.text.indexOf(key) }))
-			.filter((match) => match.index >= 0)
-			.sort((a, b) => a.index - b.index)
-
-		if (matches.length === 0) {
-			restored.push(segment)
-			continue
-		}
-
-		for (const match of matches) {
-			if (match.index > cursor) {
-				restored.push({ ...segment, text: segment.text.slice(cursor, match.index) })
-			}
-			restored.push({ text: match.value })
-			cursor = match.index + match.key.length
-		}
-
-		if (cursor < segment.text.length) {
-			restored.push({ ...segment, text: segment.text.slice(cursor) })
-		}
-	}
-
-	return restored
+function convertInlineMath(text: string): string {
+	return text.replace(INLINE_MATH_RE, (_, expression: string) => texToUnicode(expression))
 }
 
 function parseInlineSegments(fallbackText: string): Segment[] {
-	const { text, restores } = protectInlineMath(fallbackText)
-	const protectedTokens = Lexer.lexInline(text) as InlineNode[]
-	return restoreInlineMathSegments(flattenInline(protectedTokens), restores)
+	const textWithUnicode = convertInlineMath(fallbackText)
+	const tokens = Lexer.lexInline(textWithUnicode) as InlineNode[]
+	return flattenInline(tokens)
 }
 
 function flattenInline(tokens: InlineNode[] | undefined, wrappers: Partial<Pick<Segment, 'bold' | 'italic' | 'strikethrough' | 'code'>> = {}): Segment[] {
