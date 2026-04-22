@@ -9,7 +9,7 @@ function ensureKatexCss() {
 	if (katexCssInjected) return;
 	const link = document.createElement('link');
 	link.rel = 'stylesheet';
-	link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+	link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.css';
 	document.head.appendChild(link);
 	katexCssInjected = true;
 }
@@ -54,7 +54,7 @@ export class PreviewView extends ItemView {
 		const content = await this.app.vault.read(file);
 		const body = content.replace(/---\n[\s\S]*?\n---\n?/, '').trim();
 
-		const container = this.contentEl.createDiv({ cls: 'mathblog-preview' });
+		const container = this.contentEl.createDiv({ cls: 'mathblog-preview prose' });
 		container.innerHTML = renderMath(body);
 	}
 }
