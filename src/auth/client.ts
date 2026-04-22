@@ -1,18 +1,22 @@
 import { Client, FetchHandlerObject, simpleFetchHandler } from "@atcute/client";
 import { OAuthUserAgent } from "@atcute/oauth-browser-client";
 import type { ResolvedActor } from "@atcute/identity-resolver";
-import { OAuthHandler } from "./oauth";
-import { compositeResolver } from "./identity";
+import { OAuthHandler } from "./oauth-handler";
+import { compositeResolver } from "./resolver";
 
-export class ATClient extends Client {
+/**
+ * AT Protocol client with OAuth, PDS routing, and response caching.
+ * Extends @atcute/client with auth-aware request handling.
+ */
+export class ATPClient extends Client {
 	private hh: Handler;
 	private oauth: OAuthHandler;
 	actor?: ResolvedActor;
 
-	constructor() {
+	constructor(oauth: OAuthHandler) {
 		const hh = new Handler();
 		super({ handler: hh });
-		this.oauth = new OAuthHandler();
+		this.oauth = oauth;
 		this.hh = hh;
 	}
 

@@ -1,32 +1,28 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, MathblogSettings, SettingTab } from "./settings";
-import { ATClient } from "./api/client";
+import { AtpAuthManager } from "./auth";
 import { PreviewView, VIEW_TYPE_MATHBLOG_PREVIEW } from "./views/preview-view";
 import { publishNote } from "./commands/publish";
 
+// Bump this whenever you update client-metadata.json on GitHub Pages
+// so the PDS re-fetches it instead of using a stale cached version.
+export const METADATA_CACHE_BUST = 'v=3';
+
 export default class MathblogPlugin extends Plugin {
 	settings: MathblogSettings = DEFAULT_SETTINGS;
-	client: ATClient;
+	auth: AtpAuthManager;
 
 	async onload() {
 		await this.loadSettings();
-		this.client = new ATClient();
 
-		this.registerObsidianProtocolHandler('mathblog-oauth', (params) => {
-			try {
-				const urlParams = new URLSearchParams();
-				for (const [key, value] of Object.entries(params)) {
-					if (value) {
-						urlParams.set(key, String(value));
-					}
-				}
-				this.client.handleOAuthCallback(urlParams);
-				new Notice('Authentication completed!');
-			} catch (error) {
-				console.error('OAuth callback error:', error);
-				new Notice('Authentication error.');
-			}
+		this.auth = new AtpAuthManager({
+			plugin: this,
+			protocolScheme: 'mathblog-oauth',
+			clientId: `https://codegod100.github.io/mathblog/client-metadata.json?${METADATA_CACHE_BUST}`,
+			redirectUri: 'https://codegod100.github.io/mathblog/oauth-callback.html',
+			scope: 'atproto transition:generic',
 		});
+		await this.auth.initialize();
 
 		this.registerView(VIEW_TYPE_MATHBLOG_PREVIEW, (leaf) => {
 			return new PreviewView(leaf);
@@ -60,24 +56,9 @@ export default class MathblogPlugin extends Plugin {
 		this.addSettingTab(new SettingTab(this.app, this));
 	}
 
-	async checkAuth(): Promise<boolean> {
-		if (this.client.loggedIn) {
-			return true;
-		}
-		if (this.settings.did) {
-			try {
-				await this.client.restoreSession(this.settings.did);
-				return true;
-			} catch (e) {
-				console.error("Failed to restore session:", e);
-				this.settings.did = undefined;
-				await this.saveSettings();
-				new Notice("Session expired. Please log in via settings.");
-				return false;
-			}
-		}
-		new Notice("Please log in via plugin settings.");
-		return false;
+	/** Convenience accessor for the authenticated AT Protocol client. */
+	get client() {
+		return this.auth.client;
 	}
 
 	async togglePreviewView() {

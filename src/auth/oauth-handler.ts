@@ -8,31 +8,30 @@ import {
 	type Session,
 } from '@atcute/oauth-browser-client';
 import { Notice } from 'obsidian';
-import { compositeResolver } from './identity';
+import { compositeResolver } from './resolver';
 
-// Cache-busting parameter forces PDS to re-fetch client metadata if an earlier
-// version was cached (e.g. before GitHub Pages was enabled or metadata was fixed).
-const CACHE_BUST = 'v=3';
-
-// These must match the values in client-metadata.json at the repo root.
-// OAuth requires a real HTTPS redirect URI; the web page at this URL
-// redirects back into Obsidian via the obsidian:// protocol.
-const CLIENT_ID = `https://codegod100.github.io/mathblog/client-metadata.json?${CACHE_BUST}`;
-const REDIRECT_URI = 'https://codegod100.github.io/mathblog/oauth-callback.html';
-const SCOPE = 'atproto transition:generic';
+export type OAuthConfig = {
+	clientId: string;
+	redirectUri: string;
+	scope: string;
+	storageName?: string;
+};
 
 export class OAuthHandler {
 	private callbackResolver: ((value: URLSearchParams) => void) | null = null;
 	private callbackRejecter: ((reason?: Error) => void) | null = null;
 	private callbackTimeout: ReturnType<typeof setTimeout> | null = null;
+	private readonly config: OAuthConfig;
 
-	constructor() {
+	constructor(config: OAuthConfig) {
+		this.config = config;
 		configureOAuth({
 			metadata: {
-				client_id: CLIENT_ID,
-				redirect_uri: REDIRECT_URI,
+				client_id: config.clientId,
+				redirect_uri: config.redirectUri,
 			},
 			identityResolver: compositeResolver,
+			storageName: config.storageName,
 		});
 	}
 
@@ -51,7 +50,7 @@ export class OAuthHandler {
 	async authorize(identifier: string): Promise<Session> {
 		const authUrl = await createAuthorizationUrl({
 			target: { type: 'account', identifier: identifier as any },
-			scope: SCOPE,
+			scope: this.config.scope,
 		});
 
 		// Small delay to let the auth window settle (matches atmosphere plugin)

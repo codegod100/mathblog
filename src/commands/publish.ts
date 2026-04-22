@@ -12,7 +12,7 @@ export async function publishNote(plugin: MathblogPlugin) {
 		return;
 	}
 
-	if (!await plugin.checkAuth()) {
+	if (!await plugin.auth.checkAuth()) {
 		return;
 	}
 
@@ -25,7 +25,7 @@ export async function publishNote(plugin: MathblogPlugin) {
 			return;
 		}
 
-		const did = plugin.settings.did!;
+		const did = plugin.auth.did!;
 		const result = await saveDocument(
 			plugin.client,
 			did,
@@ -74,7 +74,7 @@ async function buildRecord(plugin: MathblogPlugin, file: TFile) {
 	}
 
 	if (!publicationUri) {
-		const pubs = await listPublications(plugin.client, plugin.settings.did!);
+		const pubs = await listPublications(plugin.client, plugin.auth.did!);
 		const selected = await new PublicationModal(plugin.app, pubs).awaitSelection();
 		publicationUri = selected;
 		if (!publicationUri) {
@@ -99,7 +99,7 @@ async function buildRecord(plugin: MathblogPlugin, file: TFile) {
 	article.tags = tags;
 
 	const now = new Date().toISOString();
-	const site = publicationUri || `https://leaflet.pub/p/${plugin.settings.did}`;
+	const site = publicationUri || `https://leaflet.pub/p/${plugin.auth.did}`;
 
 	const record = articleToLexicon(article, {
 		site,
