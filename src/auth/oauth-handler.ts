@@ -17,6 +17,18 @@ export type OAuthConfig = {
 	storageName?: string;
 };
 
+const IDENTITY_TIMEOUT_MS = 10_000;
+const TOKEN_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	return Promise.race([
+		promise,
+		new Promise<T>((_, reject) =>
+			setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+		),
+	]);
+}
+
 export class OAuthHandler {
 	private callbackResolver: ((value: URLSearchParams) => void) | null = null;
 	private callbackRejecter: ((reason?: Error) => void) | null = null;
@@ -36,22 +48,35 @@ export class OAuthHandler {
 	}
 
 	handleCallback(params: URLSearchParams): void {
-		if (this.callbackResolver) {
+		if (this.callbackResolver && this.callbackRejecter) {
 			if (this.callbackTimeout) {
 				clearTimeout(this.callbackTimeout);
 				this.callbackTimeout = null;
 			}
-			this.callbackResolver(params);
+
+			// Validate callback params: reject if authorization server returned an error
+			if (params.has('error')) {
+				const error = params.get('error') || 'unknown_error';
+				const description = params.get('error_description') || error;
+				this.callbackRejecter(new Error(`OAuth error: ${description}`));
+			} else {
+				this.callbackResolver(params);
+			}
+
 			this.callbackResolver = null;
 			this.callbackRejecter = null;
 		}
 	}
 
 	async authorize(identifier: string): Promise<Session> {
-		const authUrl = await createAuthorizationUrl({
-			target: { type: 'account', identifier: identifier as any },
-			scope: this.config.scope,
-		});
+		const authUrl = await withTimeout(
+			createAuthorizationUrl({
+				target: { type: 'account', identifier: identifier as any },
+				scope: this.config.scope,
+			}),
+			IDENTITY_TIMEOUT_MS,
+			'Identity resolution / PAR',
+		);
 
 		// Small delay to let the auth window settle (matches atmosphere plugin)
 		await new Promise((resolve) => setTimeout(resolve, 200));
@@ -72,7 +97,11 @@ export class OAuthHandler {
 		new Notice('Continue login in the browser');
 
 		const params = await waitForCallback;
-		const { session } = await finalizeAuthorization(params);
+		const { session } = await withTimeout(
+			finalizeAuthorization(params),
+			TOKEN_TIMEOUT_MS,
+			'Token exchange',
+		);
 		return session;
 	}
 

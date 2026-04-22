@@ -63,10 +63,10 @@ export class AuthSettingsSection {
 								new Notice("Invalid handle format. Use something like user.bsky.social");
 								return;
 							}
+							button.setDisabled(true);
+							button.setButtonText("Logging in...");
+							new Notice("Opening browser for authorization...");
 							try {
-								button.setDisabled(true);
-								button.setButtonText("Logging in...");
-								new Notice("Opening browser for authorization...");
 								await this.auth.login(handle);
 								this.onStateChange?.();
 								new Notice(`Successfully logged in as ${this.auth.handle}`);
@@ -74,6 +74,7 @@ export class AuthSettingsSection {
 								console.error("Login failed:", error);
 								const errorMessage = error instanceof Error ? error.message : String(error);
 								new Notice(`Authentication failed: ${errorMessage}`);
+							} finally {
 								button.setDisabled(false);
 								button.setButtonText("Log in");
 							}

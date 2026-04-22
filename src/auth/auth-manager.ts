@@ -68,10 +68,13 @@ export class AtpAuthManager implements IAtpAuthManager {
 					if (value) urlParams.set(key, String(value));
 				}
 				this.atpClient.handleOAuthCallback(urlParams);
-				new Notice('Authentication completed!');
+				// Only show success if no error param
+				if (!urlParams.has('error')) {
+					new Notice('Authentication completed!');
+				}
 			} catch (error) {
 				console.error('OAuth callback error:', error);
-				new Notice('Authentication error.');
+				new Notice('Authentication error: ' + (error instanceof Error ? error.message : String(error)));
 			}
 		});
 

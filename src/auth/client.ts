@@ -58,6 +58,17 @@ export class ATPClient extends Client {
 	}
 }
 
+const ACTOR_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	return Promise.race([
+		promise,
+		new Promise<T>((_, reject) =>
+			setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+		),
+	]);
+}
+
 class CacheEntry<T> {
 	value: T;
 	timestamp: number;
@@ -111,7 +122,11 @@ export class Handler implements FetchHandlerObject {
 			return cached;
 		}
 		try {
-			const res = await (compositeResolver as any).resolve(identifier);
+			const res = await withTimeout(
+				(compositeResolver as any).resolve(identifier) as Promise<ResolvedActor>,
+				ACTOR_TIMEOUT_MS,
+				'Actor resolution',
+			);
 			this.cache.set(key, res);
 			return res;
 		} catch (e) {
