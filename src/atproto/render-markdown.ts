@@ -81,7 +81,7 @@ export function renderMath(markdown: string): string {
 	}) as string
 
 	for (const token of tokens) {
-		htmlOutput = htmlOutput.replaceAll(token.key, token.html)
+		htmlOutput = htmlOutput.replaceAll(token.key, () => token.html)
 	}
 
 	return htmlOutput
