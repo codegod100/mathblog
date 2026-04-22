@@ -1,5 +1,4 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
-import { renderMath } from "../atproto/render-markdown";
+import { ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
 
 export const VIEW_TYPE_MATHBLOG_PREVIEW = "mathblog-preview";
 
@@ -43,6 +42,6 @@ export class PreviewView extends ItemView {
 		const body = content.replace(/---\n[\s\S]*?\n---\n?/, '').trim();
 
 		const container = this.contentEl.createDiv({ cls: 'mathblog-preview' });
-		container.innerHTML = renderMath(body);
+		await MarkdownRenderer.render(this.app, body, container, file.path, this);
 	}
 }
