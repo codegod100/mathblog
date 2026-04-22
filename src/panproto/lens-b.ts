@@ -24,6 +24,41 @@ function byteLength(value: string): number {
 	return new TextEncoder().encode(value).length
 }
 
+function filterAndAdjustFacets(facets: LeafletFacet[] | undefined, segByteStart: number, segByteEnd: number): LeafletFacet[] | undefined {
+	if (!facets || facets.length === 0) return undefined
+	const filtered = facets.filter(f => f.index.byteStart >= segByteStart && f.index.byteEnd <= segByteEnd)
+	if (filtered.length === 0) return undefined
+	return filtered.map(f => ({
+		...f,
+		index: { byteStart: f.index.byteStart - segByteStart, byteEnd: f.index.byteEnd - segByteStart }
+	}))
+}
+
+function splitTextBlockIntoArticleBlocks(plaintext: string, facets: LeafletFacet[] | undefined): ArticleBlock[] {
+	const blocks: ArticleBlock[] = []
+	const regex = /\$\$([\s\S]+?)\$\$/g
+	let lastIndex = 0
+	let match: RegExpExecArray | null
+
+	while ((match = regex.exec(plaintext)) !== null) {
+		const beforeText = plaintext.slice(lastIndex, match.index)
+		if (beforeText) {
+			const beforeFacets = filterAndAdjustFacets(facets, lastIndex, match.index)
+			blocks.push({ $type: 'text', segments: plaintextAndFacetsToSegments(beforeText, beforeFacets) })
+		}
+		blocks.push({ $type: 'math', tex: match[1].trim() })
+		lastIndex = regex.lastIndex
+	}
+
+	const afterText = plaintext.slice(lastIndex)
+	if (afterText) {
+		const afterFacets = filterAndAdjustFacets(facets, lastIndex, plaintext.length)
+		blocks.push({ $type: 'text', segments: plaintextAndFacetsToSegments(afterText, afterFacets) })
+	}
+
+	return blocks.length > 0 ? blocks : [{ $type: 'text', segments: plaintextAndFacetsToSegments(plaintext, facets) }]
+}
+
 function makeFacet(byteStart: number, byteEnd: number, feature: FacetFeature): LeafletFacet {
 	return {
 		$type: 'pub.leaflet.richtext.facet',
@@ -284,12 +319,12 @@ function lexiconListItemToArticle(item: UnorderedListItem | OrderedListItem): Ar
 	return result
 }
 
-function lexiconBlockToArticle(block: LeafletBlock, warnings: string[]): ArticleBlock | null {
+function lexiconBlockToArticle(block: LeafletBlock, warnings: string[]): ArticleBlock | ArticleBlock[] | null {
 	const t = block.$type
 
 	if (t === 'pub.leaflet.blocks.text') {
 		const b = block as TextBlock
-		return { $type: 'text', segments: plaintextAndFacetsToSegments(b.plaintext, b.facets) }
+		return splitTextBlockIntoArticleBlocks(b.plaintext, b.facets)
 	}
 
 	if (t === 'pub.leaflet.blocks.header') {
@@ -379,7 +414,12 @@ export function lexiconToArticle(record: SiteStandardDocumentRecord): LexiconToA
 					continue
 				}
 				const articleBlock = lexiconBlockToArticle(wrapper.block, warnings)
-				if (articleBlock) blocks.push(articleBlock)
+				if (!articleBlock) continue
+				if (Array.isArray(articleBlock)) {
+					blocks.push(...articleBlock)
+				} else {
+					blocks.push(articleBlock)
+				}
 			}
 		} else if (page.$type === 'pub.leaflet.pages.canvas') {
 			warnings.push(`Canvas page ${i + 1} skipped — not supported in this editor`)
