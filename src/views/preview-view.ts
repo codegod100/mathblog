@@ -3,17 +3,6 @@ import { renderMath } from "../atproto/render-markdown";
 
 export const VIEW_TYPE_MATHBLOG_PREVIEW = "mathblog-preview";
 
-let katexCssInjected = false;
-
-function ensureKatexCss() {
-	if (katexCssInjected) return;
-	const link = document.createElement('link');
-	link.rel = 'stylesheet';
-	link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.css';
-	document.head.appendChild(link);
-	katexCssInjected = true;
-}
-
 export class PreviewView extends ItemView {
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
@@ -28,7 +17,6 @@ export class PreviewView extends ItemView {
 	}
 
 	async onOpen() {
-		ensureKatexCss();
 		this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
 			this.render();
 		}));
@@ -54,7 +42,7 @@ export class PreviewView extends ItemView {
 		const content = await this.app.vault.read(file);
 		const body = content.replace(/---\n[\s\S]*?\n---\n?/, '').trim();
 
-		const container = this.contentEl.createDiv({ cls: 'mathblog-preview prose' });
+		const container = this.contentEl.createDiv({ cls: 'mathblog-preview' });
 		container.innerHTML = renderMath(body);
 	}
 }
